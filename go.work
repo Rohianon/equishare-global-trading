@@ -1,0 +1,14 @@
+go 1.25.1
+
+use (
+	./pkg
+	./services/api-gateway
+	./services/auth-service
+	./services/market-data-service
+	./services/notification-service
+	./services/payment-service
+	./services/portfolio-service
+	./services/trading-service
+	./services/user-service
+	./services/ussd-service
+)
