@@ -1,0 +1,169 @@
+# golangci-lint configuration
+# https://golangci-lint.run/usage/configuration/
+
+run:
+  # Timeout for analysis
+  timeout: 5m
+
+  # Include test files
+  tests: true
+
+  # Skip vendor, third_party, testdata, examples, generated
+  skip-dirs:
+    - vendor
+    - third_party
+    - testdata
+    - examples
+    - generated
+
+  # Skip generated files
+  skip-files:
+    - ".*\\.pb\\.go$"
+    - ".*_gen\\.go$"
+
+linters:
+  enable:
+    # Default linters
+    - errcheck      # Check for unchecked errors
+    - gosimple      # Simplify code
+    - govet         # Vet examines Go source code
+    - ineffassign   # Detect ineffectual assignments
+    - staticcheck   # Static analysis checks
+    - unused        # Check for unused code
+
+    # Additional linters
+    - bodyclose     # Check HTTP response body is closed
+    - contextcheck  # Check context.Context is passed correctly
+    - dupl          # Detect duplicate code
+    - durationcheck # Check for time.Duration expressions
+    - errname       # Check error naming convention
+    - errorlint     # Find issues with error wrapping
+    - exportloopref # Check for pointers to loop variables
+    - gocognit      # Cognitive complexity
+    - goconst       # Find repeated strings that could be constants
+    - gocritic      # Various checks
+    - gofmt         # Check formatting
+    - goimports     # Check imports
+    - goprintffuncname # Check printf-like function names
+    - gosec         # Security checks
+    - misspell      # Find misspelled words
+    - nakedret      # Find naked returns
+    - nilerr        # Find nil error returns
+    - noctx         # Check http request contexts
+    - prealloc      # Find slice preallocation opportunities
+    - predeclared   # Find shadowed predeclared identifiers
+    - revive        # Fast, configurable linter
+    - sqlclosecheck # Check sql.Rows.Close
+    - unconvert     # Remove unnecessary conversions
+    - unparam       # Report unused function parameters
+    - wastedassign  # Find wasted assignments
+
+  disable:
+    - exhaustive    # Too strict for our use case
+    - exhaustruct   # Too strict for our use case
+    - wrapcheck     # Not needed with our error package
+    - varnamelen    # Too opinionated
+
+linters-settings:
+  errcheck:
+    # Check type assertions
+    check-type-assertions: true
+    # Check blank identifier assignments
+    check-blank: true
+
+  govet:
+    # Enable all analyzers
+    enable-all: true
+    disable:
+      - fieldalignment # Too noisy
+
+  gocognit:
+    # Minimal cognitive complexity
+    min-complexity: 20
+
+  goconst:
+    # Minimal length of string constant
+    min-len: 3
+    # Minimal occurrences count
+    min-occurrences: 3
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+    disabled-checks:
+      - hugeParam  # Too strict
+      - rangeValCopy  # Too strict
+
+  goimports:
+    # Put imports beginning with prefix after 3rd-party packages
+    local-prefixes: github.com/Rohianon/equishare-global-trading
+
+  revive:
+    # Minimal confidence
+    confidence: 0.8
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: if-return
+      - name: increment-decrement
+      - name: var-naming
+      - name: var-declaration
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: errorf
+      - name: empty-block
+      - name: superfluous-else
+      - name: unused-parameter
+      - name: unreachable-code
+      - name: redefines-builtin-id
+
+  misspell:
+    locale: US
+
+  nakedret:
+    # Max function length for naked returns
+    max-func-lines: 30
+
+  prealloc:
+    # Only suggest preallocation for simple loops
+    simple: true
+    range-loops: true
+    for-loops: false
+
+  unparam:
+    # Check exported functions
+    check-exported: false
+
+issues:
+  # Maximum issues count per one linter
+  max-issues-per-linter: 50
+
+  # Maximum count of issues with the same text
+  max-same-issues: 3
+
+  # Exclude some linters from running on tests
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - dupl
+        - gosec
+        - goconst
+
+    - path: main\.go
+      linters:
+        - gocognit
+
+  # Independently of option `exclude` we use default exclude patterns
+  exclude-use-default: true

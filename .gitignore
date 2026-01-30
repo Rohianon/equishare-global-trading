@@ -1,0 +1,139 @@
+# ================================
+# Go
+# ================================
+
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+coverage.txt
+
+# Go workspace (don't commit go.work.sum, it's generated)
+# go.work is committed, go.work.sum is not
+go.work.sum
+
+# Dependency directories (if not vendoring)
+# vendor/
+
+# ================================
+# IDE / Editors
+# ================================
+
+# JetBrains (GoLand, IntelliJ)
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# ================================
+# OS Generated
+# ================================
+
+# macOS
+.DS_Store
+.DS_Store?
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+
+# ================================
+# Secrets & Environment
+# ================================
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.development
+.env.test
+.env.production
+
+# Private keys and certificates
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Service account keys
+*-credentials.json
+*-service-account.json
+serviceAccountKey.json
+
+# ================================
+# Infrastructure
+# ================================
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+
+# Kubernetes secrets (but not other manifests)
+*-secret.yaml
+*-secrets.yaml
+
+# ================================
+# Project Specific
+# ================================
+
+# Local config overrides
+config.local.yaml
+config.dev.yaml
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+
+# Debug files
+debug
+*.prof
