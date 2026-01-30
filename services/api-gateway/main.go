@@ -1,7 +1,8 @@
 package main
 
 import (
-	"log"
+	"errors"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -42,8 +43,8 @@ func main() {
 	})
 
 	go func() {
-		if err := app.Listen(":8000"); err != nil {
-			log.Fatalf("Failed to start server: %v", err)
+		if err := app.Listen(":8000"); err != nil && !errors.Is(err, net.ErrClosed) {
+			logger.Fatal().Err(err).Msg("Failed to start server")
 		}
 	}()
 
@@ -52,5 +53,7 @@ func main() {
 	<-quit
 
 	logger.Info().Msg("Shutting down API Gateway")
-	app.Shutdown()
+	if err := app.Shutdown(); err != nil {
+		logger.Error().Err(err).Msg("Error during shutdown")
+	}
 }
