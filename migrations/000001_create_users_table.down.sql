@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS users;
+DROP TYPE IF EXISTS kyc_tier;
+DROP TYPE IF EXISTS kyc_status;
