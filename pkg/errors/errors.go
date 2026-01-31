@@ -258,6 +258,36 @@ var (
 		Message:    "KYC verification was rejected",
 		HTTPStatus: http.StatusForbidden,
 	}
+
+	ErrKYCSessionNotFound = &AppError{
+		Code:       "KYC_SESSION_NOT_FOUND",
+		Message:    "KYC session not found",
+		HTTPStatus: http.StatusNotFound,
+	}
+
+	ErrKYCSessionExpired = &AppError{
+		Code:       "KYC_SESSION_EXPIRED",
+		Message:    "KYC session has expired",
+		HTTPStatus: http.StatusBadRequest,
+	}
+
+	ErrKYCInvalidDocument = &AppError{
+		Code:       "KYC_INVALID_DOCUMENT",
+		Message:    "Invalid document type or format",
+		HTTPStatus: http.StatusBadRequest,
+	}
+
+	ErrKYCProviderError = &AppError{
+		Code:       "KYC_PROVIDER_ERROR",
+		Message:    "KYC verification service unavailable",
+		HTTPStatus: http.StatusServiceUnavailable,
+	}
+
+	ErrKYCInvalidWebhook = &AppError{
+		Code:       "KYC_INVALID_WEBHOOK",
+		Message:    "Invalid webhook signature",
+		HTTPStatus: http.StatusUnauthorized,
+	}
 )
 
 // =============================================================================
