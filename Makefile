@@ -77,7 +77,7 @@ lint-fix:
 # Start development dependencies (Postgres, Redis, Kafka)
 dev:
 	@echo "Starting development dependencies..."
-	docker-compose up -d postgres redis kafka kafka-ui jaeger
+	docker compose up -d postgres redis kafka kafka-ui jaeger
 	@echo "Dependencies started!"
 	@echo "  PostgreSQL: localhost:5432"
 	@echo "  Redis:      localhost:6379"
@@ -88,22 +88,22 @@ dev:
 # Start all services
 dev-all:
 	@echo "Starting all services..."
-	docker-compose up -d
+	docker compose up -d
 
 # Stop development dependencies
 dev-down:
 	@echo "Stopping development dependencies..."
-	docker-compose down
+	docker compose down
 
 # Reset development environment (removes volumes)
 dev-reset:
 	@echo "Resetting development environment..."
-	docker-compose down -v
-	docker-compose up -d
+	docker compose down -v
+	docker compose up -d
 
 # View logs
 dev-logs:
-	docker-compose logs -f
+	docker compose logs -f
 
 # ============================================
 # Database

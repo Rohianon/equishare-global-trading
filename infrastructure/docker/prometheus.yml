@@ -1,0 +1,53 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['api-gateway:8000']
+    metrics_path: '/metrics'
+
+  - job_name: 'auth-service'
+    static_configs:
+      - targets: ['auth-service:8001']
+    metrics_path: '/metrics'
+
+  - job_name: 'user-service'
+    static_configs:
+      - targets: ['user-service:8002']
+    metrics_path: '/metrics'
+
+  - job_name: 'trading-service'
+    static_configs:
+      - targets: ['trading-service:8003']
+    metrics_path: '/metrics'
+
+  - job_name: 'payment-service'
+    static_configs:
+      - targets: ['payment-service:8004']
+    metrics_path: '/metrics'
+
+  - job_name: 'ussd-service'
+    static_configs:
+      - targets: ['ussd-service:8005']
+    metrics_path: '/metrics'
+
+  - job_name: 'notification-service'
+    static_configs:
+      - targets: ['notification-service:8006']
+    metrics_path: '/metrics'
+
+  - job_name: 'market-data-service'
+    static_configs:
+      - targets: ['market-data-service:8007']
+    metrics_path: '/metrics'
+
+  - job_name: 'portfolio-service'
+    static_configs:
+      - targets: ['portfolio-service:8008']
+    metrics_path: '/metrics'
