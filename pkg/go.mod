@@ -8,7 +8,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/rs/zerolog v1.34.0
-	github.com/segmentio/kafka-go v0.4.47
+	github.com/segmentio/kafka-go v0.4.50
 	github.com/spf13/viper v1.19.0
 )
 
