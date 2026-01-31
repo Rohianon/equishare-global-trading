@@ -241,7 +241,8 @@ func ParseCallback(callback *STKCallback) *CallbackData {
 }
 
 type MockClient struct {
-	Requests []MockSTKRequest
+	Requests    []MockSTKRequest
+	B2CRequests []MockB2CRequest
 }
 
 type MockSTKRequest struct {
@@ -252,7 +253,8 @@ type MockSTKRequest struct {
 
 func NewMockClient() *MockClient {
 	return &MockClient{
-		Requests: make([]MockSTKRequest, 0),
+		Requests:    make([]MockSTKRequest, 0),
+		B2CRequests: make([]MockB2CRequest, 0),
 	}
 }
 
@@ -269,5 +271,264 @@ func (c *MockClient) STKPush(ctx context.Context, phone string, amount int, refe
 		ResponseCode:        "0",
 		ResponseDescription: "Success. Request accepted for processing",
 		CustomerMessage:     "Success. Request accepted for processing",
+	}, nil
+}
+
+// =============================================================================
+// B2C (Business to Customer) - Withdrawals
+// =============================================================================
+
+// B2CConfig holds additional config needed for B2C transactions
+type B2CConfig struct {
+	InitiatorName     string
+	InitiatorPassword string
+	SecurityCredential string // Encrypted password
+	QueueTimeoutURL   string
+	ResultURL         string
+}
+
+// B2CRequest represents a B2C payout request
+type B2CRequest struct {
+	InitiatorName      string `json:"InitiatorName"`
+	SecurityCredential string `json:"SecurityCredential"`
+	CommandID          string `json:"CommandID"`
+	Amount             int    `json:"Amount"`
+	PartyA             string `json:"PartyA"`
+	PartyB             string `json:"PartyB"`
+	Remarks            string `json:"Remarks"`
+	QueueTimeOutURL    string `json:"QueueTimeOutURL"`
+	ResultURL          string `json:"ResultURL"`
+	Occasion           string `json:"Occasion"`
+}
+
+// B2CResponse represents the response from a B2C request
+type B2CResponse struct {
+	ConversationID           string `json:"ConversationID"`
+	OriginatorConversationID string `json:"OriginatorConversationID"`
+	ResponseCode             string `json:"ResponseCode"`
+	ResponseDescription      string `json:"ResponseDescription"`
+}
+
+// B2CCommandID represents the type of B2C transaction
+type B2CCommandID string
+
+const (
+	// BusinessPayment is for payment of salaries, bonuses, etc.
+	BusinessPayment B2CCommandID = "BusinessPayment"
+	// SalaryPayment is specifically for salary disbursements
+	SalaryPayment B2CCommandID = "SalaryPayment"
+	// PromotionPayment is for promotional payments
+	PromotionPayment B2CCommandID = "PromotionPayment"
+)
+
+// B2C initiates a Business to Customer payment (withdrawal)
+func (c *Client) B2C(ctx context.Context, phone string, amount int, reference string, b2cConfig *B2CConfig) (*B2CResponse, error) {
+	token, err := c.getAccessToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	reqBody := B2CRequest{
+		InitiatorName:      b2cConfig.InitiatorName,
+		SecurityCredential: b2cConfig.SecurityCredential,
+		CommandID:          string(BusinessPayment),
+		Amount:             amount,
+		PartyA:             c.config.ShortCode,
+		PartyB:             phone,
+		Remarks:            "EquiShare Withdrawal",
+		QueueTimeOutURL:    b2cConfig.QueueTimeoutURL,
+		ResultURL:          b2cConfig.ResultURL,
+		Occasion:           reference,
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/mpesa/b2c/v1/paymentrequest", c.baseURL)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send B2C request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var b2cResp B2CResponse
+	if err := json.NewDecoder(resp.Body).Decode(&b2cResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if b2cResp.ResponseCode != "0" {
+		return nil, fmt.Errorf("B2C request failed: %s", b2cResp.ResponseDescription)
+	}
+
+	return &b2cResp, nil
+}
+
+// B2CCallback represents the callback data from M-Pesa for B2C transactions
+type B2CCallback struct {
+	Result struct {
+		ResultType               int    `json:"ResultType"`
+		ResultCode               int    `json:"ResultCode"`
+		ResultDesc               string `json:"ResultDesc"`
+		OriginatorConversationID string `json:"OriginatorConversationID"`
+		ConversationID           string `json:"ConversationID"`
+		TransactionID            string `json:"TransactionID"`
+		ResultParameters         *struct {
+			ResultParameter []ResultParameter `json:"ResultParameter"`
+		} `json:"ResultParameters"`
+	} `json:"Result"`
+}
+
+// ResultParameter represents a key-value pair in the result parameters
+type ResultParameter struct {
+	Key   string `json:"Key"`
+	Value any    `json:"Value"`
+}
+
+// B2CCallbackData represents parsed B2C callback data
+type B2CCallbackData struct {
+	ResultCode               int
+	ResultDesc               string
+	OriginatorConversationID string
+	ConversationID           string
+	TransactionID            string
+	TransactionAmount        float64
+	TransactionReceipt       string
+	ReceiverPartyPublicName  string
+	TransactionCompletedTime string
+	B2CUtilityAccountBalance float64
+	B2CWorkingAccountBalance float64
+	IsSuccess                bool
+}
+
+// ParseB2CCallback parses a B2C callback into structured data
+func ParseB2CCallback(callback *B2CCallback) *B2CCallbackData {
+	data := &B2CCallbackData{
+		ResultCode:               callback.Result.ResultCode,
+		ResultDesc:               callback.Result.ResultDesc,
+		OriginatorConversationID: callback.Result.OriginatorConversationID,
+		ConversationID:           callback.Result.ConversationID,
+		TransactionID:            callback.Result.TransactionID,
+		IsSuccess:                callback.Result.ResultCode == 0,
+	}
+
+	if callback.Result.ResultParameters != nil {
+		for _, param := range callback.Result.ResultParameters.ResultParameter {
+			switch param.Key {
+			case "TransactionAmount":
+				if v, ok := param.Value.(float64); ok {
+					data.TransactionAmount = v
+				}
+			case "TransactionReceipt":
+				if v, ok := param.Value.(string); ok {
+					data.TransactionReceipt = v
+				}
+			case "ReceiverPartyPublicName":
+				if v, ok := param.Value.(string); ok {
+					data.ReceiverPartyPublicName = v
+				}
+			case "TransactionCompletedDateTime":
+				if v, ok := param.Value.(string); ok {
+					data.TransactionCompletedTime = v
+				}
+			case "B2CUtilityAccountAvailableFunds":
+				if v, ok := param.Value.(float64); ok {
+					data.B2CUtilityAccountBalance = v
+				}
+			case "B2CWorkingAccountAvailableFunds":
+				if v, ok := param.Value.(float64); ok {
+					data.B2CWorkingAccountBalance = v
+				}
+			}
+		}
+	}
+
+	return data
+}
+
+// =============================================================================
+// Withdrawal Status
+// =============================================================================
+
+// WithdrawalStatus represents the status of a withdrawal
+type WithdrawalStatus string
+
+const (
+	WithdrawalPending    WithdrawalStatus = "pending"
+	WithdrawalProcessing WithdrawalStatus = "processing"
+	WithdrawalSucceeded  WithdrawalStatus = "succeeded"
+	WithdrawalFailed     WithdrawalStatus = "failed"
+	WithdrawalReversed   WithdrawalStatus = "reversed"
+)
+
+// Withdrawal represents a withdrawal record
+type Withdrawal struct {
+	ID                       string           `json:"id"`
+	UserID                   string           `json:"user_id"`
+	Phone                    string           `json:"phone"`
+	Amount                   int              `json:"amount"`
+	Fee                      int              `json:"fee"`
+	NetAmount                int              `json:"net_amount"`
+	Status                   WithdrawalStatus `json:"status"`
+	Reference                string           `json:"reference"`
+	ConversationID           string           `json:"conversation_id,omitempty"`
+	OriginatorConversationID string           `json:"originator_conversation_id,omitempty"`
+	TransactionID            string           `json:"transaction_id,omitempty"`
+	ResultCode               int              `json:"result_code,omitempty"`
+	ResultDesc               string           `json:"result_desc,omitempty"`
+	CreatedAt                time.Time        `json:"created_at"`
+	UpdatedAt                time.Time        `json:"updated_at"`
+	CompletedAt              *time.Time       `json:"completed_at,omitempty"`
+}
+
+// IsStatusTransitionValid checks if a status transition is valid
+func IsStatusTransitionValid(from, to WithdrawalStatus) bool {
+	transitions := map[WithdrawalStatus][]WithdrawalStatus{
+		WithdrawalPending:    {WithdrawalProcessing, WithdrawalFailed},
+		WithdrawalProcessing: {WithdrawalSucceeded, WithdrawalFailed},
+		WithdrawalSucceeded:  {WithdrawalReversed},
+		WithdrawalFailed:     {WithdrawalPending}, // Can retry
+		WithdrawalReversed:   {},                  // Terminal
+	}
+
+	for _, valid := range transitions[from] {
+		if valid == to {
+			return true
+		}
+	}
+	return false
+}
+
+// =============================================================================
+// Mock B2C Client
+// =============================================================================
+
+type MockB2CRequest struct {
+	Phone     string
+	Amount    int
+	Reference string
+}
+
+func (c *MockClient) B2C(ctx context.Context, phone string, amount int, reference string, b2cConfig *B2CConfig) (*B2CResponse, error) {
+	c.B2CRequests = append(c.B2CRequests, MockB2CRequest{
+		Phone:     phone,
+		Amount:    amount,
+		Reference: reference,
+	})
+
+	return &B2CResponse{
+		ConversationID:           fmt.Sprintf("mock-conv-%d", time.Now().UnixNano()),
+		OriginatorConversationID: fmt.Sprintf("mock-orig-%d", time.Now().UnixNano()),
+		ResponseCode:             "0",
+		ResponseDescription:      "Accept the service request successfully.",
 	}, nil
 }
