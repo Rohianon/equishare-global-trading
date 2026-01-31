@@ -3,6 +3,8 @@ package events
 import (
 	"testing"
 	"time"
+
+	"github.com/segmentio/kafka-go"
 )
 
 func TestNewKafkaPublisher(t *testing.T) {
@@ -63,25 +65,54 @@ func TestKafkaSubscriberImplementsInterface(t *testing.T) {
 
 func TestEventWithDefaults(t *testing.T) {
 	event := &Event{
-		Type:   "test.event",
-		Source: "test-service",
-		Data:   map[string]string{"key": "value"},
+		EventType: "test.event.v1",
+		Source:    "test-service",
+		Payload:   map[string]string{"key": "value"},
 	}
 
-	if event.ID != "" {
-		t.Error("Event.ID should be empty initially")
+	if event.EventID != "" {
+		t.Error("Event.EventID should be empty initially")
 	}
-	if !event.Time.IsZero() {
-		t.Error("Event.Time should be zero initially")
+	if !event.OccurredAt.IsZero() {
+		t.Error("Event.OccurredAt should be zero initially")
 	}
 
-	event.ID = "generated-id"
-	event.Time = time.Now()
+	event.EventID = "generated-id"
+	event.OccurredAt = time.Now()
 
-	if event.ID == "" {
-		t.Error("Event.ID should be set")
+	if event.EventID == "" {
+		t.Error("Event.EventID should be set")
 	}
-	if event.Time.IsZero() {
-		t.Error("Event.Time should be set")
+	if event.OccurredAt.IsZero() {
+		t.Error("Event.OccurredAt should be set")
+	}
+}
+
+func TestKafkaHeaderCarrier(t *testing.T) {
+	headers := make([]kafka.Header, 0)
+	carrier := &kafkaHeaderCarrier{headers: &headers}
+
+	// Test Set
+	carrier.Set("key1", "value1")
+	if carrier.Get("key1") != "value1" {
+		t.Errorf("Get(key1) = %v, want value1", carrier.Get("key1"))
+	}
+
+	// Test overwrite
+	carrier.Set("key1", "value2")
+	if carrier.Get("key1") != "value2" {
+		t.Errorf("After overwrite, Get(key1) = %v, want value2", carrier.Get("key1"))
+	}
+
+	// Test Keys
+	carrier.Set("key2", "value3")
+	keys := carrier.Keys()
+	if len(keys) != 2 {
+		t.Errorf("Keys() length = %d, want 2", len(keys))
+	}
+
+	// Test Get non-existent key
+	if carrier.Get("nonexistent") != "" {
+		t.Error("Get for non-existent key should return empty string")
 	}
 }

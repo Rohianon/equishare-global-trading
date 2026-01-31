@@ -41,11 +41,12 @@ func (p *KafkaPublisher) getWriter(topic string) *kafka.Writer {
 }
 
 func (p *KafkaPublisher) Publish(ctx context.Context, topic string, event *Event) error {
-	if event.ID == "" {
-		event.ID = uuid.New().String()
+	// Auto-populate required fields if not set
+	if event.EventID == "" {
+		event.EventID = uuid.New().String()
 	}
-	if event.Time.IsZero() {
-		event.Time = time.Now()
+	if event.OccurredAt.IsZero() {
+		event.OccurredAt = time.Now().UTC()
 	}
 
 	// Start producer span
@@ -56,8 +57,8 @@ func (p *KafkaPublisher) Publish(ctx context.Context, topic string, event *Event
 			attribute.String("messaging.system", "kafka"),
 			attribute.String("messaging.destination.name", topic),
 			attribute.String("messaging.operation", "publish"),
-			attribute.String("messaging.message.id", event.ID),
-			attribute.String("event.type", event.Type),
+			attribute.String("messaging.message.id", event.EventID),
+			attribute.String("event.type", event.EventType),
 		),
 	)
 	defer span.End()
@@ -75,7 +76,7 @@ func (p *KafkaPublisher) Publish(ctx context.Context, topic string, event *Event
 
 	writer := p.getWriter(topic)
 	err = writer.WriteMessages(ctx, kafka.Message{
-		Key:     []byte(event.ID),
+		Key:     []byte(event.EventID),
 		Value:   data,
 		Headers: headers,
 	})
@@ -160,8 +161,8 @@ func (s *KafkaSubscriber) Subscribe(ctx context.Context, topic string, handler f
 				}
 
 				span.SetAttributes(
-					attribute.String("messaging.message.id", event.ID),
-					attribute.String("event.type", event.Type),
+					attribute.String("messaging.message.id", event.EventID),
+					attribute.String("event.type", event.EventType),
 				)
 
 				if err := handler(&event); err != nil {
