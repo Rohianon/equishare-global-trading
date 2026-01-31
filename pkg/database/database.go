@@ -4,16 +4,18 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Config struct {
-	Host     string
-	Port     int
-	User     string
-	Password string
-	Database string
-	SSLMode  string
+	Host          string
+	Port          int
+	User          string
+	Password      string
+	Database      string
+	SSLMode       string
+	EnableTracing bool // Enable OpenTelemetry tracing
 }
 
 func (c *Config) ConnectionString() string {
@@ -33,6 +35,11 @@ func NewPool(ctx context.Context, cfg *Config) (*pgxpool.Pool, error) {
 
 	poolConfig.MaxConns = 25
 	poolConfig.MinConns = 5
+
+	// Add OpenTelemetry tracing if enabled
+	if cfg.EnableTracing {
+		poolConfig.ConnConfig.Tracer = otelpgx.NewTracer()
+	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {

@@ -8,6 +8,11 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/Rohianon/equishare-global-trading/pkg/logger"
 )
@@ -49,16 +54,89 @@ func Logger() fiber.Handler {
 
 		err := c.Next()
 
-		logger.Info().
+		logEvent := logger.Info().
 			Str("method", c.Method()).
 			Str("path", c.Path()).
 			Int("status", c.Response().StatusCode()).
 			Dur("latency", time.Since(start)).
-			Str("request_id", GetRequestID(c)).
-			Msg("request")
+			Str("request_id", GetRequestID(c))
+
+		// Add trace_id if present
+		if traceID := GetTraceID(c); traceID != "" {
+			logEvent = logEvent.Str("trace_id", traceID)
+		}
+
+		logEvent.Msg("request")
 
 		return err
 	}
+}
+
+// Tracing returns OpenTelemetry tracing middleware for Fiber
+func Tracing(serviceName string) fiber.Handler {
+	tracer := otel.Tracer(serviceName)
+	propagator := otel.GetTextMapPropagator()
+
+	return func(c *fiber.Ctx) error {
+		// Extract trace context from incoming headers
+		ctx := propagator.Extract(c.UserContext(), propagation.HeaderCarrier(c.GetReqHeaders()))
+
+		// Start a new span
+		spanName := c.Method() + " " + c.Path()
+		ctx, span := tracer.Start(ctx, spanName,
+			trace.WithSpanKind(trace.SpanKindServer),
+			trace.WithAttributes(
+				semconv.HTTPMethod(c.Method()),
+				semconv.HTTPRoute(c.Route().Path),
+				semconv.HTTPURL(c.OriginalURL()),
+				semconv.HTTPScheme(c.Protocol()),
+				semconv.NetHostName(c.Hostname()),
+				semconv.UserAgentOriginal(c.Get("User-Agent")),
+			),
+		)
+		defer span.End()
+
+		// Store trace info in context and locals
+		c.SetUserContext(ctx)
+		c.Locals("trace_id", span.SpanContext().TraceID().String())
+		c.Locals("span_id", span.SpanContext().SpanID().String())
+
+		// Set trace headers in response
+		c.Set("X-Trace-ID", span.SpanContext().TraceID().String())
+
+		// Process request
+		err := c.Next()
+
+		// Record response status
+		status := c.Response().StatusCode()
+		span.SetAttributes(semconv.HTTPStatusCode(status))
+
+		if status >= 400 {
+			span.SetAttributes(attribute.Bool("error", true))
+		}
+
+		if err != nil {
+			span.RecordError(err)
+		}
+
+		return err
+	}
+}
+
+// GetTraceID returns the trace ID from the request context
+func GetTraceID(c *fiber.Ctx) string {
+	if id, ok := c.Locals("trace_id").(string); ok {
+		return id
+	}
+	return ""
+}
+
+// GetSpanID returns the span ID from the request context
+func GetSpanID(c *fiber.Ctx) string {
+	if id, ok := c.Locals("span_id").(string); ok {
+		return id
+	}
+	return ""
 }
 
 type RateLimitConfig struct {
