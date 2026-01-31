@@ -1,0 +1,47 @@
+global:
+  # Default SMTP configuration (disabled)
+  # smtp_smarthost: 'localhost:587'
+  # smtp_from: 'alertmanager@equishare.com'
+  resolve_timeout: 5m
+
+# Route tree
+route:
+  group_by: ['alertname', 'service']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'default-receiver'
+  routes:
+    # Critical alerts go to high-priority channel
+    - match:
+        severity: critical
+      receiver: 'critical-receiver'
+      group_wait: 10s
+    # Warning alerts
+    - match:
+        severity: warning
+      receiver: 'default-receiver'
+
+# Receivers
+receivers:
+  - name: 'default-receiver'
+    # For local development, just log alerts
+    # In production, configure webhook/email/slack
+    webhook_configs:
+      - url: 'http://localhost:9999/alert'  # Dummy endpoint
+        send_resolved: true
+
+  - name: 'critical-receiver'
+    # Same as default for now
+    webhook_configs:
+      - url: 'http://localhost:9999/alert'
+        send_resolved: true
+
+# Inhibition rules
+inhibit_rules:
+  # If a critical alert is firing, suppress related warnings
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'service']
