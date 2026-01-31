@@ -1,0 +1,359 @@
+# =============================================================================
+# Authentication Service API
+# =============================================================================
+# Handles user registration, login, and token management.
+# Base path: /api/v1/auth
+# =============================================================================
+
+openapi: "3.1.0"
+info:
+  title: EquiShare Authentication API
+  description: |
+    Authentication and authorization service for EquiShare platform.
+
+    ## Authentication Flow
+
+    1. **Registration**: User submits phone number → receives OTP via SMS
+    2. **Verification**: User submits OTP + PIN → receives JWT tokens
+    3. **Login**: User submits phone + PIN/password → receives JWT tokens
+    4. **Token Refresh**: Use refresh token to get new access token
+
+    ## Token Usage
+
+    Include the access token in the Authorization header:
+    ```
+    Authorization: Bearer <access_token>
+    ```
+  version: "1.0.0"
+  contact:
+    name: EquiShare API Team
+    email: api@equishare.co.ke
+
+servers:
+  - url: /api/v1
+    description: API v1
+
+tags:
+  - name: Registration
+    description: User registration endpoints
+  - name: Authentication
+    description: Login and token management
+  - name: Password
+    description: Password and PIN management
+
+paths:
+  /auth/register:
+    post:
+      summary: Start registration
+      description: |
+        Initiates registration by sending an OTP to the provided phone number.
+        The OTP is valid for 5 minutes.
+      operationId: register
+      tags:
+        - Registration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phone:
+                  type: string
+                  description: Phone number in E.164 format (Kenya)
+                  pattern: '^\+254[17]\d{8}$'
+                  example: "+254712345678"
+              required:
+                - phone
+      responses:
+        "200":
+          description: OTP sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                        example: "OTP sent to +254712XXXX78"
+                      expires_in:
+                        type: integer
+                        description: OTP validity in seconds
+                        example: 300
+                  meta:
+                    $ref: "common.yaml#/components/schemas/Meta"
+        "400":
+          $ref: "common.yaml#/components/responses/BadRequest"
+        "409":
+          description: Phone number already registered
+          content:
+            application/json:
+              schema:
+                $ref: "common.yaml#/components/schemas/ErrorResponse"
+              example:
+                error:
+                  code: "USER_PHONE_EXISTS"
+                  message: "Phone number already registered"
+                meta:
+                  request_id: "550e8400-e29b-41d4-a716-446655440000"
+                  timestamp: "2026-01-31T12:00:00Z"
+        "429":
+          $ref: "common.yaml#/components/responses/TooManyRequests"
+
+  /auth/verify:
+    post:
+      summary: Complete registration
+      description: |
+        Completes registration by verifying OTP and setting PIN.
+        Returns JWT tokens on success.
+      operationId: verify
+      tags:
+        - Registration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phone:
+                  type: string
+                  pattern: '^\+254[17]\d{8}$'
+                  example: "+254712345678"
+                otp:
+                  type: string
+                  description: 6-digit OTP received via SMS
+                  pattern: '^\d{6}$'
+                  example: "123456"
+                pin:
+                  type: string
+                  description: 4-digit PIN for quick access (USSD, mobile)
+                  pattern: '^\d{4}$'
+                  example: "1234"
+                password:
+                  type: string
+                  description: Optional password for web/API access
+                  minLength: 8
+              required:
+                - phone
+                - otp
+                - pin
+      responses:
+        "201":
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/AuthResponse"
+                  meta:
+                    $ref: "common.yaml#/components/schemas/Meta"
+        "400":
+          $ref: "common.yaml#/components/responses/BadRequest"
+
+  /auth/login:
+    post:
+      summary: Login
+      description: |
+        Authenticates user with phone and PIN or password.
+        Returns JWT tokens on success.
+      operationId: login
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phone:
+                  type: string
+                  pattern: '^\+254[17]\d{8}$'
+                  example: "+254712345678"
+                pin:
+                  type: string
+                  description: 4-digit PIN
+                  pattern: '^\d{4}$'
+                password:
+                  type: string
+                  description: Password (alternative to PIN)
+              required:
+                - phone
+            examples:
+              pin_login:
+                summary: Login with PIN
+                value:
+                  phone: "+254712345678"
+                  pin: "1234"
+              password_login:
+                summary: Login with password
+                value:
+                  phone: "+254712345678"
+                  password: "securepassword123"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/AuthResponse"
+                  meta:
+                    $ref: "common.yaml#/components/schemas/Meta"
+        "400":
+          $ref: "common.yaml#/components/responses/BadRequest"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "common.yaml#/components/schemas/ErrorResponse"
+              example:
+                error:
+                  code: "AUTH_INVALID_CREDENTIALS"
+                  message: "Invalid phone number or PIN"
+                meta:
+                  request_id: "550e8400-e29b-41d4-a716-446655440000"
+                  timestamp: "2026-01-31T12:00:00Z"
+        "403":
+          description: Account deactivated
+          content:
+            application/json:
+              schema:
+                $ref: "common.yaml#/components/schemas/ErrorResponse"
+
+  /auth/refresh:
+    post:
+      summary: Refresh tokens
+      description: |
+        Exchanges a valid refresh token for new access and refresh tokens.
+        The old refresh token is invalidated.
+      operationId: refreshToken
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token:
+                  type: string
+                  description: Refresh token from login/verify response
+              required:
+                - refresh_token
+      responses:
+        "200":
+          description: Tokens refreshed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/TokenResponse"
+                  meta:
+                    $ref: "common.yaml#/components/schemas/Meta"
+        "401":
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: "common.yaml#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      summary: Logout
+      description: Invalidates the current session and refresh token.
+      operationId: logout
+      tags:
+        - Authentication
+      security:
+        - BearerAuth: []
+      responses:
+        "204":
+          description: Logged out successfully
+        "401":
+          $ref: "common.yaml#/components/responses/Unauthorized"
+
+  /auth/me:
+    get:
+      summary: Get current user
+      description: Returns the authenticated user's profile.
+      operationId: getCurrentUser
+      tags:
+        - Authentication
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "common.yaml#/components/schemas/User"
+                  meta:
+                    $ref: "common.yaml#/components/schemas/Meta"
+        "401":
+          $ref: "common.yaml#/components/responses/Unauthorized"
+
+components:
+  schemas:
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/UserSummary"
+        access_token:
+          type: string
+          description: JWT access token (short-lived)
+        refresh_token:
+          type: string
+          description: JWT refresh token (long-lived)
+        expires_in:
+          type: integer
+          description: Access token validity in seconds
+          example: 900
+
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        expires_in:
+          type: integer
+          example: 900
+
+    UserSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        phone:
+          type: string
+          example: "+254712345678"
+        kyc_status:
+          type: string
+          enum: [none, pending, verified, rejected]
+        kyc_tier:
+          type: string
+          enum: [none, basic, full]
+
+  securitySchemes:
+    BearerAuth:
+      $ref: "common.yaml#/components/securitySchemes/BearerAuth"

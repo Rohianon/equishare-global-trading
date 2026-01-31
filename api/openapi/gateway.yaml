@@ -1,0 +1,195 @@
+# =============================================================================
+# EquiShare API Gateway - Consolidated OpenAPI Specification
+# =============================================================================
+# This is the main entry point for the EquiShare API documentation.
+# It consolidates all service APIs into a single specification.
+# =============================================================================
+
+openapi: "3.1.0"
+info:
+  title: EquiShare Global Trading API
+  description: |
+    # Overview
+
+    EquiShare enables Kenyan users to invest in US stocks using M-Pesa.
+    This API provides endpoints for authentication, payments, and trading.
+
+    ## Base URL
+
+    All API requests should be made to:
+    ```
+    https://api.equishare.co.ke/api/v1
+    ```
+
+    For sandbox/testing:
+    ```
+    https://sandbox.equishare.co.ke/api/v1
+    ```
+
+    ## Authentication
+
+    Most endpoints require authentication via JWT bearer tokens.
+    Obtain tokens through the `/auth/login` or `/auth/verify` endpoints.
+
+    Include the token in the Authorization header:
+    ```
+    Authorization: Bearer <your_access_token>
+    ```
+
+    ## Response Format
+
+    All responses follow a standard envelope format:
+
+    **Success Response:**
+    ```json
+    {
+      "data": { ... },
+      "meta": {
+        "request_id": "uuid",
+        "timestamp": "2026-01-31T12:00:00Z",
+        "version": "v1"
+      }
+    }
+    ```
+
+    **Error Response:**
+    ```json
+    {
+      "error": {
+        "code": "ERROR_CODE",
+        "message": "Human readable message",
+        "details": ["Additional details"]
+      },
+      "meta": {
+        "request_id": "uuid",
+        "timestamp": "2026-01-31T12:00:00Z"
+      }
+    }
+    ```
+
+    ## Rate Limiting
+
+    API requests are rate limited:
+    - **Authenticated requests**: 100 requests per minute
+    - **Unauthenticated requests**: 20 requests per minute
+
+    Rate limit headers are included in all responses:
+    - `X-RateLimit-Limit`: Maximum requests allowed
+    - `X-RateLimit-Remaining`: Requests remaining
+    - `X-RateLimit-Reset`: Unix timestamp when limit resets
+
+    ## Error Codes
+
+    | Code | HTTP Status | Description |
+    |------|-------------|-------------|
+    | `VALIDATION_ERROR` | 400 | Invalid request parameters |
+    | `UNAUTHORIZED` | 401 | Authentication required |
+    | `AUTH_INVALID_CREDENTIALS` | 401 | Invalid login credentials |
+    | `AUTH_TOKEN_EXPIRED` | 401 | Access token expired |
+    | `FORBIDDEN` | 403 | Access denied |
+    | `USER_KYC_REQUIRED` | 403 | KYC verification needed |
+    | `NOT_FOUND` | 404 | Resource not found |
+    | `CONFLICT` | 409 | Resource conflict |
+    | `RATE_LIMITED` | 429 | Too many requests |
+    | `PAYMENT_INSUFFICIENT_FUNDS` | 400 | Insufficient wallet balance |
+    | `TRADING_MARKET_CLOSED` | 400 | Market is closed |
+    | `INTERNAL_ERROR` | 500 | Unexpected server error |
+    | `SERVICE_UNAVAILABLE` | 503 | External service unavailable |
+
+    ## Versioning
+
+    The API uses URL versioning. The current version is `v1`.
+    Breaking changes will result in a new version (`v2`, etc.).
+
+    Non-breaking changes (new fields, new endpoints) may be added to existing versions.
+    Clients should ignore unknown fields in responses.
+
+    ## Support
+
+    - Email: support@equishare.co.ke
+    - Documentation: https://docs.equishare.co.ke
+    - Status: https://status.equishare.co.ke
+
+  version: "1.0.0"
+  contact:
+    name: EquiShare API Support
+    email: api@equishare.co.ke
+    url: https://docs.equishare.co.ke
+  license:
+    name: Proprietary
+    url: https://equishare.co.ke/terms
+
+servers:
+  - url: https://api.equishare.co.ke/api/v1
+    description: Production
+  - url: https://sandbox.equishare.co.ke/api/v1
+    description: Sandbox
+  - url: http://localhost:8080/api/v1
+    description: Local Development
+
+tags:
+  - name: Authentication
+    description: User registration, login, and token management
+  - name: Payments
+    description: Wallet, deposits, and withdrawals
+  - name: Trading
+    description: Orders, positions, and market data
+  - name: User
+    description: User profile and settings
+
+# ===========================================================================
+# Paths - References to individual service specs
+# ===========================================================================
+# In production, these would be bundled. For development, use $ref.
+# ===========================================================================
+
+paths:
+  # Authentication
+  /auth/register:
+    $ref: "auth.yaml#/paths/~1auth~1register"
+  /auth/verify:
+    $ref: "auth.yaml#/paths/~1auth~1verify"
+  /auth/login:
+    $ref: "auth.yaml#/paths/~1auth~1login"
+  /auth/refresh:
+    $ref: "auth.yaml#/paths/~1auth~1refresh"
+  /auth/logout:
+    $ref: "auth.yaml#/paths/~1auth~1logout"
+  /auth/me:
+    $ref: "auth.yaml#/paths/~1auth~1me"
+
+  # Payments
+  /payments/wallet:
+    $ref: "payment.yaml#/paths/~1payments~1wallet"
+  /payments/transactions:
+    $ref: "payment.yaml#/paths/~1payments~1transactions"
+  /payments/deposit:
+    $ref: "payment.yaml#/paths/~1payments~1deposit"
+  /payments/deposit/{id}/status:
+    $ref: "payment.yaml#/paths/~1payments~1deposit~1{id}~1status"
+  /payments/withdraw:
+    $ref: "payment.yaml#/paths/~1payments~1withdraw"
+  /payments/withdraw/{id}/status:
+    $ref: "payment.yaml#/paths/~1payments~1withdraw~1{id}~1status"
+
+  # Trading
+  /trading/orders:
+    $ref: "trading.yaml#/paths/~1trading~1orders"
+  /trading/orders/{id}:
+    $ref: "trading.yaml#/paths/~1trading~1orders~1{id}"
+  /trading/positions:
+    $ref: "trading.yaml#/paths/~1trading~1positions"
+  /trading/positions/{symbol}:
+    $ref: "trading.yaml#/paths/~1trading~1positions~1{symbol}"
+  /trading/quotes/{symbol}:
+    $ref: "trading.yaml#/paths/~1trading~1quotes~1{symbol}"
+  /trading/assets:
+    $ref: "trading.yaml#/paths/~1trading~1assets"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      $ref: "common.yaml#/components/securitySchemes/BearerAuth"
+
+security:
+  - BearerAuth: []
