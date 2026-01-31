@@ -481,3 +481,259 @@ func TestGetPhone(t *testing.T) {
 		}
 	})
 }
+
+// =============================================================================
+// 2FA Middleware Tests
+// =============================================================================
+
+// Mock2FAValidator implements TwoFactorValidator for testing
+type Mock2FAValidator struct {
+	users map[string]struct {
+		enabled       bool
+		totpCode      string
+		recoveryCodes []string
+	}
+}
+
+func NewMock2FAValidator() *Mock2FAValidator {
+	return &Mock2FAValidator{
+		users: make(map[string]struct {
+			enabled       bool
+			totpCode      string
+			recoveryCodes []string
+		}),
+	}
+}
+
+func (m *Mock2FAValidator) SetUser(userID string, enabled bool, totpCode string, recoveryCodes []string) {
+	m.users[userID] = struct {
+		enabled       bool
+		totpCode      string
+		recoveryCodes []string
+	}{enabled, totpCode, recoveryCodes}
+}
+
+func (m *Mock2FAValidator) Is2FAEnabled(userID string) (bool, error) {
+	user, exists := m.users[userID]
+	if !exists {
+		return false, nil
+	}
+	return user.enabled, nil
+}
+
+func (m *Mock2FAValidator) ValidateCode(userID, code string) (bool, error) {
+	user, exists := m.users[userID]
+	if !exists {
+		return false, nil
+	}
+	return user.totpCode == code, nil
+}
+
+func (m *Mock2FAValidator) ValidateRecoveryCode(userID, code string) (bool, error) {
+	user, exists := m.users[userID]
+	if !exists {
+		return false, nil
+	}
+	for _, rc := range user.recoveryCodes {
+		if rc == code {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func TestRequire2FA(t *testing.T) {
+	validator := NewMock2FAValidator()
+
+	// Set up user with 2FA enabled
+	validator.SetUser("user-with-2fa", true, "123456", []string{"ABCD-1234"})
+	// User without 2FA
+	validator.SetUser("user-without-2fa", false, "", nil)
+
+	t.Run("no authentication", func(t *testing.T) {
+		app := fiber.New(fiber.Config{
+			ErrorHandler: response.ErrorHandler,
+		})
+		app.Use(Require2FA(validator))
+		app.Get("/", func(c *fiber.Ctx) error {
+			return c.SendString("ok")
+		})
+
+		req := httptest.NewRequest("GET", "/", nil)
+		resp, _ := app.Test(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 401 {
+			t.Errorf("Status = %v, want 401 (unauthorized)", resp.StatusCode)
+		}
+	})
+
+	t.Run("2FA not enabled passes through", func(t *testing.T) {
+		app := fiber.New(fiber.Config{
+			ErrorHandler: response.ErrorHandler,
+		})
+		app.Use(func(c *fiber.Ctx) error {
+			c.Locals("user_id", "user-without-2fa")
+			return c.Next()
+		})
+		app.Use(Require2FA(validator))
+		app.Get("/", func(c *fiber.Ctx) error {
+			return c.SendString("ok")
+		})
+
+		req := httptest.NewRequest("GET", "/", nil)
+		resp, _ := app.Test(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			t.Errorf("Status = %v, want 200 (2FA not required)", resp.StatusCode)
+		}
+	})
+
+	t.Run("2FA required but no code", func(t *testing.T) {
+		app := fiber.New(fiber.Config{
+			ErrorHandler: response.ErrorHandler,
+		})
+		app.Use(func(c *fiber.Ctx) error {
+			c.Locals("user_id", "user-with-2fa")
+			return c.Next()
+		})
+		app.Use(Require2FA(validator))
+		app.Get("/", func(c *fiber.Ctx) error {
+			return c.SendString("ok")
+		})
+
+		req := httptest.NewRequest("GET", "/", nil)
+		resp, _ := app.Test(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 403 {
+			t.Errorf("Status = %v, want 403 (2FA required)", resp.StatusCode)
+		}
+	})
+
+	t.Run("valid TOTP code", func(t *testing.T) {
+		app := fiber.New(fiber.Config{
+			ErrorHandler: response.ErrorHandler,
+		})
+		app.Use(func(c *fiber.Ctx) error {
+			c.Locals("user_id", "user-with-2fa")
+			return c.Next()
+		})
+		app.Use(Require2FA(validator))
+		app.Get("/", func(c *fiber.Ctx) error {
+			verified := Get2FAVerified(c)
+			if verified {
+				return c.SendString("verified")
+			}
+			return c.SendString("not-verified")
+		})
+
+		req := httptest.NewRequest("GET", "/", nil)
+		req.Header.Set("X-2FA-Code", "123456")
+		resp, _ := app.Test(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			t.Errorf("Status = %v, want 200", resp.StatusCode)
+		}
+
+		body, _ := io.ReadAll(resp.Body)
+		if string(body) != "verified" {
+			t.Errorf("Body = %v, want verified", string(body))
+		}
+	})
+
+	t.Run("invalid TOTP code", func(t *testing.T) {
+		app := fiber.New(fiber.Config{
+			ErrorHandler: response.ErrorHandler,
+		})
+		app.Use(func(c *fiber.Ctx) error {
+			c.Locals("user_id", "user-with-2fa")
+			return c.Next()
+		})
+		app.Use(Require2FA(validator))
+		app.Get("/", func(c *fiber.Ctx) error {
+			return c.SendString("ok")
+		})
+
+		req := httptest.NewRequest("GET", "/", nil)
+		req.Header.Set("X-2FA-Code", "000000")
+		resp, _ := app.Test(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 400 {
+			t.Errorf("Status = %v, want 400 (invalid code)", resp.StatusCode)
+		}
+	})
+
+	t.Run("valid recovery code", func(t *testing.T) {
+		app := fiber.New(fiber.Config{
+			ErrorHandler: response.ErrorHandler,
+		})
+		app.Use(func(c *fiber.Ctx) error {
+			c.Locals("user_id", "user-with-2fa")
+			return c.Next()
+		})
+		app.Use(Require2FA(validator))
+		app.Get("/", func(c *fiber.Ctx) error {
+			usedRecovery := GetUsedRecoveryCode(c)
+			if usedRecovery {
+				return c.SendString("used-recovery")
+			}
+			return c.SendString("totp")
+		})
+
+		req := httptest.NewRequest("GET", "/", nil)
+		req.Header.Set("X-2FA-Code", "ABCD-1234")
+		resp, _ := app.Test(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			t.Errorf("Status = %v, want 200", resp.StatusCode)
+		}
+
+		body, _ := io.ReadAll(resp.Body)
+		if string(body) != "used-recovery" {
+			t.Errorf("Body = %v, want used-recovery", string(body))
+		}
+	})
+}
+
+func TestGet2FAVerified(t *testing.T) {
+	app := fiber.New()
+	app.Get("/", func(c *fiber.Ctx) error {
+		if Get2FAVerified(c) {
+			return c.SendString("verified")
+		}
+		return c.SendString("not-verified")
+	})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != "not-verified" {
+		t.Error("Get2FAVerified should return false when not set")
+	}
+}
+
+func TestGetUsedRecoveryCode(t *testing.T) {
+	app := fiber.New()
+	app.Get("/", func(c *fiber.Ctx) error {
+		if GetUsedRecoveryCode(c) {
+			return c.SendString("used-recovery")
+		}
+		return c.SendString("not-used")
+	})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != "not-used" {
+		t.Error("GetUsedRecoveryCode should return false when not set")
+	}
+}
