@@ -1,0 +1,22 @@
+# Default owners for everything
+* @Rohianon
+
+# Infrastructure
+/infrastructure/ @Rohianon
+/.github/ @Rohianon
+/docker-compose.yml @Rohianon
+/Makefile @Rohianon
+
+# Shared packages
+/pkg/ @Rohianon
+
+# Services
+/services/api-gateway/ @Rohianon
+/services/auth-service/ @Rohianon
+/services/user-service/ @Rohianon
+/services/trading-service/ @Rohianon
+/services/payment-service/ @Rohianon
+/services/ussd-service/ @Rohianon
+/services/notification-service/ @Rohianon
+/services/market-data-service/ @Rohianon
+/services/portfolio-service/ @Rohianon
