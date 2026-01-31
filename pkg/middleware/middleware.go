@@ -328,6 +328,92 @@ func GetUserID(c *fiber.Ctx) string {
 	return ""
 }
 
+// =============================================================================
+// 2FA Middleware
+// =============================================================================
+
+// TwoFactorValidator defines the interface for validating 2FA codes
+type TwoFactorValidator interface {
+	// Is2FAEnabled checks if 2FA is enabled for a user
+	Is2FAEnabled(userID string) (bool, error)
+	// ValidateCode validates a TOTP code for a user
+	ValidateCode(userID, code string) (bool, error)
+	// ValidateRecoveryCode validates and consumes a recovery code
+	ValidateRecoveryCode(userID, code string) (bool, error)
+}
+
+// Require2FA creates middleware that enforces 2FA for sensitive actions
+// The 2FA code should be provided in the X-2FA-Code header
+func Require2FA(validator TwoFactorValidator) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		userID := GetUserID(c)
+		if userID == "" {
+			return apperrors.ErrUnauthorized.WithDetails("Authentication required before 2FA")
+		}
+
+		// Check if user has 2FA enabled
+		enabled, err := validator.Is2FAEnabled(userID)
+		if err != nil {
+			logger.Error().Err(err).Str("user_id", userID).Msg("Failed to check 2FA status")
+			return apperrors.ErrInternal
+		}
+
+		// If 2FA is not enabled, allow the request (graceful degradation)
+		if !enabled {
+			return c.Next()
+		}
+
+		// Get 2FA code from header
+		code := c.Get("X-2FA-Code")
+		if code == "" {
+			return apperrors.Err2FARequired
+		}
+
+		// Try TOTP code first
+		valid, err := validator.ValidateCode(userID, code)
+		if err != nil {
+			logger.Error().Err(err).Str("user_id", userID).Msg("Failed to validate 2FA code")
+			return apperrors.ErrInternal
+		}
+
+		if valid {
+			c.Locals("2fa_verified", true)
+			return c.Next()
+		}
+
+		// Try recovery code as fallback
+		valid, err = validator.ValidateRecoveryCode(userID, code)
+		if err != nil {
+			logger.Error().Err(err).Str("user_id", userID).Msg("Failed to validate recovery code")
+			return apperrors.ErrInternal
+		}
+
+		if valid {
+			c.Locals("2fa_verified", true)
+			c.Locals("used_recovery_code", true)
+			return c.Next()
+		}
+
+		return apperrors.ErrInvalid2FACode
+	}
+}
+
+// Get2FAVerified returns whether 2FA was verified for this request
+func Get2FAVerified(c *fiber.Ctx) bool {
+	if verified, ok := c.Locals("2fa_verified").(bool); ok {
+		return verified
+	}
+	return false
+}
+
+// GetUsedRecoveryCode returns whether a recovery code was used for 2FA
+func GetUsedRecoveryCode(c *fiber.Ctx) bool {
+	if used, ok := c.Locals("used_recovery_code").(bool); ok {
+		return used
+	}
+	return false
+}
+
 // GetPhone returns the phone from the request context
 func GetPhone(c *fiber.Ctx) string {
 	if phone, ok := c.Locals("phone").(string); ok {

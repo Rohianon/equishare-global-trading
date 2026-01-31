@@ -186,6 +186,24 @@ var (
 		Message:    "Invalid 2FA code",
 		HTTPStatus: http.StatusBadRequest,
 	}
+
+	Err2FAAlreadyEnabled = &AppError{
+		Code:       "AUTH_2FA_ALREADY_ENABLED",
+		Message:    "Two-factor authentication is already enabled",
+		HTTPStatus: http.StatusConflict,
+	}
+
+	Err2FANotEnabled = &AppError{
+		Code:       "AUTH_2FA_NOT_ENABLED",
+		Message:    "Two-factor authentication is not enabled",
+		HTTPStatus: http.StatusBadRequest,
+	}
+
+	Err2FASetupIncomplete = &AppError{
+		Code:       "AUTH_2FA_SETUP_INCOMPLETE",
+		Message:    "2FA setup must be verified before enabling",
+		HTTPStatus: http.StatusBadRequest,
+	}
 )
 
 // =============================================================================
