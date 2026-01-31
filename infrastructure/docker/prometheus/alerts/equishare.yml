@@ -1,0 +1,150 @@
+groups:
+  - name: equishare-availability
+    interval: 30s
+    rules:
+      # Service down alert
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "{{ $labels.job }} has been down for more than 1 minute."
+
+      # High error rate
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m])) by (service)
+            /
+            sum(rate(http_requests_total[5m])) by (service)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate on {{ $labels.service }}"
+          description: "Error rate is {{ $value | humanizePercentage }} on {{ $labels.service }}."
+
+      # Critical error rate
+      - alert: CriticalErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m])) by (service)
+            /
+            sum(rate(http_requests_total[5m])) by (service)
+          ) > 0.10
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical error rate on {{ $labels.service }}"
+          description: "Error rate is {{ $value | humanizePercentage }} on {{ $labels.service }}."
+
+  - name: equishare-latency
+    interval: 30s
+    rules:
+      # High latency warning
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (service, le)) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High latency on {{ $labels.service }}"
+          description: "P95 latency is {{ $value | humanizeDuration }} on {{ $labels.service }}."
+
+      # Critical latency
+      - alert: CriticalLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (service, le)) > 5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical latency on {{ $labels.service }}"
+          description: "P95 latency is {{ $value | humanizeDuration }} on {{ $labels.service }}."
+
+  - name: equishare-resources
+    interval: 30s
+    rules:
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: |
+          process_resident_memory_bytes / 1024 / 1024 > 512
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.job }}"
+          description: "Memory usage is {{ $value | humanize }}MB on {{ $labels.job }}."
+
+      # Goroutine leak
+      - alert: GoroutineLeak
+        expr: |
+          go_goroutines > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Possible goroutine leak on {{ $labels.job }}"
+          description: "{{ $labels.job }} has {{ $value }} goroutines."
+
+  - name: equishare-database
+    interval: 30s
+    rules:
+      # Database connection pool exhausted
+      - alert: DatabaseConnectionPoolExhausted
+        expr: |
+          db_pool_connections_used / db_pool_connections_max > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database connection pool nearly exhausted"
+          description: "{{ $labels.service }} is using {{ $value | humanizePercentage }} of database connections."
+
+  - name: equishare-kafka
+    interval: 30s
+    rules:
+      # High consumer lag
+      - alert: KafkaConsumerLag
+        expr: |
+          kafka_consumer_lag > 10000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High Kafka consumer lag"
+          description: "Consumer group {{ $labels.consumer_group }} has lag of {{ $value }} on topic {{ $labels.topic }}."
+
+  - name: equishare-business
+    interval: 60s
+    rules:
+      # Payment failures
+      - alert: HighPaymentFailureRate
+        expr: |
+          (
+            sum(rate(payment_transactions_total{status="failed"}[15m]))
+            /
+            sum(rate(payment_transactions_total[15m]))
+          ) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High payment failure rate"
+          description: "Payment failure rate is {{ $value | humanizePercentage }}."
+
+      # Trading errors
+      - alert: TradingErrors
+        expr: |
+          sum(rate(trading_orders_total{status="error"}[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Trading errors detected"
+          description: "Trading error rate is {{ $value }} per second."
