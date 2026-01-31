@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +15,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	"go.opentelemetry.io/otel/trace"
 
+	apperrors "github.com/Rohianon/equishare-global-trading/pkg/errors"
 	"github.com/Rohianon/equishare-global-trading/pkg/logger"
 )
 
@@ -164,36 +166,61 @@ func RateLimiter(config RateLimitConfig) fiber.Handler {
 	go rl.cleanup()
 
 	return func(c *fiber.Ctx) error {
-		ip := c.IP()
+		// Use user ID if authenticated, otherwise IP
+		key := c.IP()
+		if userID := GetUserID(c); userID != "" {
+			key = "user:" + userID
+		}
 
 		rl.mu.Lock()
-		v, exists := rl.visitors[ip]
+		v, exists := rl.visitors[key]
+		now := time.Now()
+
 		if !exists {
-			rl.visitors[ip] = &visitor{count: 1, lastSeen: time.Now()}
+			rl.visitors[key] = &visitor{count: 1, lastSeen: now}
 			rl.mu.Unlock()
+			setRateLimitHeaders(c, config.Max, config.Max-1, now.Add(config.Duration))
 			return c.Next()
 		}
 
+		// Reset if window expired
 		if time.Since(v.lastSeen) > rl.config.Duration {
 			v.count = 1
-			v.lastSeen = time.Now()
+			v.lastSeen = now
 			rl.mu.Unlock()
+			setRateLimitHeaders(c, config.Max, config.Max-1, now.Add(config.Duration))
 			return c.Next()
 		}
+
+		remaining := config.Max - v.count - 1
+		resetTime := v.lastSeen.Add(config.Duration)
 
 		if v.count >= rl.config.Max {
 			rl.mu.Unlock()
-			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-				"error": "rate limit exceeded",
-			})
+			setRateLimitHeaders(c, config.Max, 0, resetTime)
+			return apperrors.ErrRateLimited
 		}
 
 		v.count++
-		v.lastSeen = time.Now()
+		v.lastSeen = now
 		rl.mu.Unlock()
 
+		setRateLimitHeaders(c, config.Max, remaining, resetTime)
 		return c.Next()
 	}
+}
+
+func setRateLimitHeaders(c *fiber.Ctx, limit, remaining int, reset time.Time) {
+	c.Set("X-RateLimit-Limit", strconv.Itoa(limit))
+	c.Set("X-RateLimit-Remaining", strconv.Itoa(max(0, remaining)))
+	c.Set("X-RateLimit-Reset", strconv.FormatInt(reset.Unix(), 10))
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func (rl *rateLimiter) cleanup() {
@@ -219,38 +246,37 @@ func Auth(jwtSecret string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		authHeader := c.Get("Authorization")
 		if authHeader == "" {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "missing authorization header",
-			})
+			return apperrors.ErrUnauthorized.WithDetails("Missing authorization header")
 		}
 
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "invalid authorization header format",
-			})
+			return apperrors.ErrUnauthorized.WithDetails("Invalid authorization header format")
 		}
 
 		tokenString := parts[1]
 
 		token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (any, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fiber.ErrUnauthorized
+				return nil, apperrors.ErrInvalidToken
 			}
 			return []byte(jwtSecret), nil
 		})
 
-		if err != nil || !token.Valid {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "invalid token",
-			})
+		if err != nil {
+			if strings.Contains(err.Error(), "expired") {
+				return apperrors.ErrTokenExpired
+			}
+			return apperrors.ErrInvalidToken
+		}
+
+		if !token.Valid {
+			return apperrors.ErrInvalidToken
 		}
 
 		claims, ok := token.Claims.(*Claims)
 		if !ok {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "invalid token claims",
-			})
+			return apperrors.ErrInvalidToken.WithDetails("Invalid token claims")
 		}
 
 		c.Locals("user_id", claims.UserID)
@@ -260,9 +286,52 @@ func Auth(jwtSecret string) fiber.Handler {
 	}
 }
 
+// OptionalAuth validates JWT if present but doesn't require it
+func OptionalAuth(jwtSecret string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		authHeader := c.Get("Authorization")
+		if authHeader == "" {
+			return c.Next()
+		}
+
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			return c.Next()
+		}
+
+		tokenString := parts[1]
+
+		token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (any, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, apperrors.ErrInvalidToken
+			}
+			return []byte(jwtSecret), nil
+		})
+
+		if err != nil || !token.Valid {
+			return c.Next()
+		}
+
+		if claims, ok := token.Claims.(*Claims); ok {
+			c.Locals("user_id", claims.UserID)
+			c.Locals("phone", claims.Phone)
+		}
+
+		return c.Next()
+	}
+}
+
 func GetUserID(c *fiber.Ctx) string {
 	if id, ok := c.Locals("user_id").(string); ok {
 		return id
+	}
+	return ""
+}
+
+// GetPhone returns the phone from the request context
+func GetPhone(c *fiber.Ctx) string {
+	if phone, ok := c.Locals("phone").(string); ok {
+		return phone
 	}
 	return ""
 }

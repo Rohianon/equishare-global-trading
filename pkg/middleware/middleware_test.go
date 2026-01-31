@@ -10,6 +10,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/Rohianon/equishare-global-trading/pkg/logger"
+	"github.com/Rohianon/equishare-global-trading/pkg/response"
 )
 
 func init() {
@@ -126,7 +127,10 @@ func TestLogger(t *testing.T) {
 }
 
 func TestRateLimiter(t *testing.T) {
-	app := fiber.New()
+	// Use error handler to properly convert AppErrors
+	app := fiber.New(fiber.Config{
+		ErrorHandler: response.ErrorHandler,
+	})
 	app.Use(RateLimiter(RateLimitConfig{
 		Max:      2,
 		Duration: time.Second,
@@ -150,11 +154,65 @@ func TestRateLimiter(t *testing.T) {
 	if resp.StatusCode != 429 {
 		t.Errorf("Request 3 should be rate limited, got status %d", resp.StatusCode)
 	}
+
+	// Verify rate limit headers are set
+	if resp.Header.Get("X-RateLimit-Limit") == "" {
+		t.Error("X-RateLimit-Limit header should be set")
+	}
+	if resp.Header.Get("X-RateLimit-Remaining") == "" {
+		t.Error("X-RateLimit-Remaining header should be set")
+	}
+	if resp.Header.Get("X-RateLimit-Reset") == "" {
+		t.Error("X-RateLimit-Reset header should be set")
+	}
+}
+
+func TestRateLimiterReset(t *testing.T) {
+	app := fiber.New(fiber.Config{
+		ErrorHandler: response.ErrorHandler,
+	})
+	app.Use(RateLimiter(RateLimitConfig{
+		Max:      1,
+		Duration: 100 * time.Millisecond,
+	}))
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.SendString("ok")
+	})
+
+	// First request should succeed
+	req := httptest.NewRequest("GET", "/", nil)
+	resp, _ := app.Test(req)
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Errorf("First request should succeed, got status %d", resp.StatusCode)
+	}
+
+	// Second request should be rate limited
+	req = httptest.NewRequest("GET", "/", nil)
+	resp, _ = app.Test(req)
+	resp.Body.Close()
+	if resp.StatusCode != 429 {
+		t.Errorf("Second request should be rate limited, got status %d", resp.StatusCode)
+	}
+
+	// Wait for window to reset
+	time.Sleep(150 * time.Millisecond)
+
+	// Third request should succeed after reset
+	req = httptest.NewRequest("GET", "/", nil)
+	resp, _ = app.Test(req)
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Errorf("Request after reset should succeed, got status %d", resp.StatusCode)
+	}
 }
 
 func TestAuth(t *testing.T) {
 	jwtSecret := "test-secret"
-	app := fiber.New()
+	// Use error handler to properly convert AppErrors
+	app := fiber.New(fiber.Config{
+		ErrorHandler: response.ErrorHandler,
+	})
 	app.Use(Auth(jwtSecret))
 	app.Get("/", func(c *fiber.Ctx) error {
 		userID := GetUserID(c)
@@ -216,6 +274,93 @@ func TestAuth(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		if string(body) != "user-123" {
 			t.Errorf("UserID = %v, want user-123", string(body))
+		}
+	})
+
+	t.Run("expired token", func(t *testing.T) {
+		claims := &Claims{
+			UserID: "user-123",
+			Phone:  "+1234567890",
+			RegisteredClaims: jwt.RegisteredClaims{
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(-time.Hour)),
+			},
+		}
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		tokenString, _ := token.SignedString([]byte(jwtSecret))
+
+		req := httptest.NewRequest("GET", "/", nil)
+		req.Header.Set("Authorization", "Bearer "+tokenString)
+		resp, _ := app.Test(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 401 {
+			t.Errorf("Status = %v, want 401", resp.StatusCode)
+		}
+	})
+}
+
+func TestOptionalAuth(t *testing.T) {
+	jwtSecret := "test-secret"
+	app := fiber.New()
+	app.Use(OptionalAuth(jwtSecret))
+	app.Get("/", func(c *fiber.Ctx) error {
+		userID := GetUserID(c)
+		if userID == "" {
+			return c.SendString("anonymous")
+		}
+		return c.SendString(userID)
+	})
+
+	t.Run("no authorization header", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/", nil)
+		resp, _ := app.Test(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			t.Errorf("Status = %v, want 200", resp.StatusCode)
+		}
+
+		body, _ := io.ReadAll(resp.Body)
+		if string(body) != "anonymous" {
+			t.Errorf("Body = %v, want anonymous", string(body))
+		}
+	})
+
+	t.Run("invalid token passes through", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/", nil)
+		req.Header.Set("Authorization", "Bearer invalid-token")
+		resp, _ := app.Test(req)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			t.Errorf("Status = %v, want 200", resp.StatusCode)
+		}
+
+		body, _ := io.ReadAll(resp.Body)
+		if string(body) != "anonymous" {
+			t.Errorf("Body = %v, want anonymous", string(body))
+		}
+	})
+
+	t.Run("valid token sets user", func(t *testing.T) {
+		claims := &Claims{
+			UserID: "user-456",
+			Phone:  "+1234567890",
+			RegisteredClaims: jwt.RegisteredClaims{
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+			},
+		}
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		tokenString, _ := token.SignedString([]byte(jwtSecret))
+
+		req := httptest.NewRequest("GET", "/", nil)
+		req.Header.Set("Authorization", "Bearer "+tokenString)
+		resp, _ := app.Test(req)
+		defer resp.Body.Close()
+
+		body, _ := io.ReadAll(resp.Body)
+		if string(body) != "user-456" {
+			t.Errorf("Body = %v, want user-456", string(body))
 		}
 	})
 }
@@ -293,4 +438,46 @@ func TestGetUserID(t *testing.T) {
 	if string(body) != "" {
 		t.Error("GetUserID should return empty string when no user is set")
 	}
+}
+
+func TestGetPhone(t *testing.T) {
+	jwtSecret := "test-secret"
+	app := fiber.New()
+	app.Use(OptionalAuth(jwtSecret))
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.SendString(GetPhone(c))
+	})
+
+	t.Run("no phone set", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/", nil)
+		resp, _ := app.Test(req)
+		defer resp.Body.Close()
+
+		body, _ := io.ReadAll(resp.Body)
+		if string(body) != "" {
+			t.Error("GetPhone should return empty string when no user is set")
+		}
+	})
+
+	t.Run("phone from token", func(t *testing.T) {
+		claims := &Claims{
+			UserID: "user-123",
+			Phone:  "+254712345678",
+			RegisteredClaims: jwt.RegisteredClaims{
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+			},
+		}
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		tokenString, _ := token.SignedString([]byte(jwtSecret))
+
+		req := httptest.NewRequest("GET", "/", nil)
+		req.Header.Set("Authorization", "Bearer "+tokenString)
+		resp, _ := app.Test(req)
+		defer resp.Body.Close()
+
+		body, _ := io.ReadAll(resp.Body)
+		if string(body) != "+254712345678" {
+			t.Errorf("GetPhone = %v, want +254712345678", string(body))
+		}
+	})
 }
