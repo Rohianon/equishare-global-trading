@@ -1,0 +1,440 @@
+# =============================================================================
+# Trading Service API
+# =============================================================================
+# Handles order placement, management, and position tracking.
+# Base path: /api/v1/trading
+# =============================================================================
+
+openapi: "3.1.0"
+info:
+  title: EquiShare Trading API
+  description: |
+    Trading service for placing and managing stock orders.
+
+    ## Order Types
+
+    - **Market Order**: Executes immediately at current market price
+    - **Limit Order**: Executes only at specified price or better
+
+    ## Order Flow
+
+    1. User places order → Order validated → Funds locked
+    2. Order submitted to broker (Alpaca)
+    3. Order status updates via webhooks
+    4. On fill: Portfolio updated, funds released/deducted
+
+    ## Trading Hours
+
+    US Market hours: 9:30 AM - 4:00 PM ET (Mon-Fri)
+    Market orders outside hours will be queued for market open.
+  version: "1.0.0"
+
+servers:
+  - url: /api/v1
+    description: API v1
+
+tags:
+  - name: Orders
+    description: Order placement and management
+  - name: Positions
+    description: Portfolio positions
+  - name: Market Data
+    description: Quotes and asset information
+
+paths:
+  /trading/orders:
+    get:
+      summary: List orders
+      description: Returns paginated list of user's orders.
+      operationId: listOrders
+      tags:
+        - Orders
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "common.yaml#/components/parameters/PageParam"
+        - $ref: "common.yaml#/components/parameters/PerPageParam"
+        - name: status
+          in: query
+          description: Filter by order status
+          schema:
+            type: string
+            enum: [pending, submitted, partial_fill, filled, cancelled, rejected]
+        - name: symbol
+          in: query
+          description: Filter by symbol
+          schema:
+            type: string
+        - name: side
+          in: query
+          description: Filter by side
+          schema:
+            type: string
+            enum: [buy, sell]
+      responses:
+        "200":
+          description: List of orders
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "common.yaml#/components/schemas/Order"
+                      pagination:
+                        $ref: "common.yaml#/components/schemas/Pagination"
+                  meta:
+                    $ref: "common.yaml#/components/schemas/Meta"
+        "401":
+          $ref: "common.yaml#/components/responses/Unauthorized"
+
+    post:
+      summary: Place order
+      description: |
+        Places a new buy or sell order.
+
+        **Amount-based ordering**: Specify `amount` in KES to buy a dollar amount of shares.
+        The system calculates the equivalent USD and quantity.
+
+        **Quantity-based ordering**: Specify `qty` for exact number of shares.
+        Fractional shares are supported (minimum 0.001).
+      operationId: placeOrder
+      tags:
+        - Orders
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaceOrderRequest"
+            examples:
+              market_buy_amount:
+                summary: Market buy by KES amount
+                value:
+                  symbol: "AAPL"
+                  side: "buy"
+                  type: "market"
+                  amount: 5000
+              market_buy_qty:
+                summary: Market buy by quantity
+                value:
+                  symbol: "AAPL"
+                  side: "buy"
+                  type: "market"
+                  qty: 0.5
+              limit_sell:
+                summary: Limit sell order
+                value:
+                  symbol: "AAPL"
+                  side: "sell"
+                  type: "limit"
+                  qty: 1.5
+                  limit_price: 180.00
+      responses:
+        "201":
+          description: Order placed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "common.yaml#/components/schemas/Order"
+                  meta:
+                    $ref: "common.yaml#/components/schemas/Meta"
+        "400":
+          description: Invalid order parameters
+          content:
+            application/json:
+              schema:
+                $ref: "common.yaml#/components/schemas/ErrorResponse"
+              examples:
+                insufficient_funds:
+                  value:
+                    error:
+                      code: "PAYMENT_INSUFFICIENT_FUNDS"
+                      message: "Insufficient balance for this transaction"
+                    meta:
+                      request_id: "550e8400-e29b-41d4-a716-446655440000"
+                      timestamp: "2026-01-31T12:00:00Z"
+                invalid_symbol:
+                  value:
+                    error:
+                      code: "TRADING_INVALID_SYMBOL"
+                      message: "Invalid or unsupported symbol"
+                    meta:
+                      request_id: "550e8400-e29b-41d4-a716-446655440000"
+                      timestamp: "2026-01-31T12:00:00Z"
+        "401":
+          $ref: "common.yaml#/components/responses/Unauthorized"
+        "403":
+          description: KYC required or trading restricted
+          content:
+            application/json:
+              schema:
+                $ref: "common.yaml#/components/schemas/ErrorResponse"
+
+  /trading/orders/{id}:
+    get:
+      summary: Get order
+      description: Returns details of a specific order.
+      operationId: getOrder
+      tags:
+        - Orders
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "common.yaml#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Order details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "common.yaml#/components/schemas/Order"
+                  meta:
+                    $ref: "common.yaml#/components/schemas/Meta"
+        "401":
+          $ref: "common.yaml#/components/responses/Unauthorized"
+        "404":
+          $ref: "common.yaml#/components/responses/NotFound"
+
+    delete:
+      summary: Cancel order
+      description: |
+        Cancels a pending or submitted order.
+        Cannot cancel filled or already cancelled orders.
+      operationId: cancelOrder
+      tags:
+        - Orders
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "common.yaml#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Order cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "common.yaml#/components/schemas/Order"
+                  meta:
+                    $ref: "common.yaml#/components/schemas/Meta"
+        "400":
+          description: Order cannot be cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "common.yaml#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "common.yaml#/components/responses/Unauthorized"
+        "404":
+          $ref: "common.yaml#/components/responses/NotFound"
+
+  /trading/positions:
+    get:
+      summary: List positions
+      description: Returns all current portfolio positions.
+      operationId: listPositions
+      tags:
+        - Positions
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Portfolio positions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      positions:
+                        type: array
+                        items:
+                          $ref: "common.yaml#/components/schemas/Position"
+                      total_value:
+                        type: number
+                        format: double
+                        description: Total portfolio value in USD
+                      total_pl:
+                        type: number
+                        format: double
+                        description: Total unrealized P/L
+                      total_pl_percent:
+                        type: number
+                        format: double
+                  meta:
+                    $ref: "common.yaml#/components/schemas/Meta"
+        "401":
+          $ref: "common.yaml#/components/responses/Unauthorized"
+
+  /trading/positions/{symbol}:
+    get:
+      summary: Get position
+      description: Returns position for a specific symbol.
+      operationId: getPosition
+      tags:
+        - Positions
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "common.yaml#/components/parameters/SymbolParam"
+      responses:
+        "200":
+          description: Position details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "common.yaml#/components/schemas/Position"
+                  meta:
+                    $ref: "common.yaml#/components/schemas/Meta"
+        "401":
+          $ref: "common.yaml#/components/responses/Unauthorized"
+        "404":
+          $ref: "common.yaml#/components/responses/NotFound"
+
+  /trading/quotes/{symbol}:
+    get:
+      summary: Get quote
+      description: Returns real-time quote for a symbol.
+      operationId: getQuote
+      tags:
+        - Market Data
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "common.yaml#/components/parameters/SymbolParam"
+      responses:
+        "200":
+          description: Quote data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "common.yaml#/components/schemas/Quote"
+                  meta:
+                    $ref: "common.yaml#/components/schemas/Meta"
+        "400":
+          description: Invalid symbol
+          content:
+            application/json:
+              schema:
+                $ref: "common.yaml#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "common.yaml#/components/responses/Unauthorized"
+
+  /trading/assets:
+    get:
+      summary: List tradeable assets
+      description: Returns list of assets available for trading.
+      operationId: listAssets
+      tags:
+        - Market Data
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          description: Search by symbol or name
+          schema:
+            type: string
+        - $ref: "common.yaml#/components/parameters/PageParam"
+        - $ref: "common.yaml#/components/parameters/PerPageParam"
+      responses:
+        "200":
+          description: List of assets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Asset"
+                      pagination:
+                        $ref: "common.yaml#/components/schemas/Pagination"
+                  meta:
+                    $ref: "common.yaml#/components/schemas/Meta"
+        "401":
+          $ref: "common.yaml#/components/responses/Unauthorized"
+
+components:
+  schemas:
+    PlaceOrderRequest:
+      type: object
+      properties:
+        symbol:
+          type: string
+          description: Stock symbol
+          example: "AAPL"
+        side:
+          type: string
+          enum: [buy, sell]
+        type:
+          type: string
+          enum: [market, limit]
+          default: market
+        amount:
+          type: number
+          format: double
+          description: Amount in KES (for buy orders)
+          example: 5000
+        qty:
+          type: number
+          format: double
+          description: Number of shares (fractional allowed)
+          example: 0.5
+        limit_price:
+          type: number
+          format: double
+          description: Limit price in USD (required for limit orders)
+      required:
+        - symbol
+        - side
+
+    Asset:
+      type: object
+      properties:
+        symbol:
+          type: string
+          example: "AAPL"
+        name:
+          type: string
+          example: "Apple Inc."
+        exchange:
+          type: string
+          example: "NASDAQ"
+        tradeable:
+          type: boolean
+        fractionable:
+          type: boolean
+          description: Whether fractional shares are supported
+
+  securitySchemes:
+    BearerAuth:
+      $ref: "common.yaml#/components/securitySchemes/BearerAuth"

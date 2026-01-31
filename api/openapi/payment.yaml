@@ -1,0 +1,410 @@
+# =============================================================================
+# Payment Service API
+# =============================================================================
+# Handles deposits, withdrawals, and wallet management.
+# Base path: /api/v1/payments
+# =============================================================================
+
+openapi: "3.1.0"
+info:
+  title: EquiShare Payment API
+  description: |
+    Payment service for managing deposits and withdrawals via M-Pesa.
+
+    ## Deposit Flow (STK Push)
+
+    1. User initiates deposit with amount
+    2. System sends STK push to user's phone
+    3. User enters M-Pesa PIN on phone
+    4. M-Pesa callback confirms payment
+    5. Wallet balance updated
+
+    ## Withdrawal Flow (B2C)
+
+    1. User requests withdrawal
+    2. System validates balance and limits
+    3. B2C transfer initiated to user's M-Pesa
+    4. Callback confirms transfer
+    5. Wallet balance deducted
+  version: "1.0.0"
+
+servers:
+  - url: /api/v1
+    description: API v1
+
+tags:
+  - name: Wallet
+    description: Wallet balance and transactions
+  - name: Deposits
+    description: Deposit funds via M-Pesa
+  - name: Withdrawals
+    description: Withdraw funds to M-Pesa
+
+paths:
+  /payments/wallet:
+    get:
+      summary: Get wallet
+      description: Returns the user's wallet balance and details.
+      operationId: getWallet
+      tags:
+        - Wallet
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Wallet details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "common.yaml#/components/schemas/Wallet"
+                  meta:
+                    $ref: "common.yaml#/components/schemas/Meta"
+        "401":
+          $ref: "common.yaml#/components/responses/Unauthorized"
+
+  /payments/transactions:
+    get:
+      summary: List transactions
+      description: Returns paginated list of wallet transactions.
+      operationId: listTransactions
+      tags:
+        - Wallet
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "common.yaml#/components/parameters/PageParam"
+        - $ref: "common.yaml#/components/parameters/PerPageParam"
+        - name: type
+          in: query
+          description: Filter by transaction type
+          schema:
+            type: string
+            enum: [deposit, withdrawal, trade_buy, trade_sell, fee]
+        - name: status
+          in: query
+          description: Filter by status
+          schema:
+            type: string
+            enum: [pending, completed, failed]
+        - name: from
+          in: query
+          description: Filter from date (inclusive)
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          description: Filter to date (inclusive)
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Transaction history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Transaction"
+                      pagination:
+                        $ref: "common.yaml#/components/schemas/Pagination"
+                  meta:
+                    $ref: "common.yaml#/components/schemas/Meta"
+        "401":
+          $ref: "common.yaml#/components/responses/Unauthorized"
+
+  /payments/deposit:
+    post:
+      summary: Initiate deposit
+      description: |
+        Initiates an M-Pesa STK push to the user's registered phone number.
+        The user will receive a prompt on their phone to enter their M-Pesa PIN.
+
+        **Limits:**
+        - Minimum: KES 100
+        - Maximum: KES 150,000 per transaction
+        - Daily limit: KES 300,000
+      operationId: initiateDeposit
+      tags:
+        - Deposits
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount:
+                  type: number
+                  format: double
+                  description: Amount in KES
+                  minimum: 100
+                  maximum: 150000
+                  example: 5000
+              required:
+                - amount
+      responses:
+        "202":
+          description: Deposit initiated, awaiting M-Pesa confirmation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      transaction_id:
+                        type: string
+                        format: uuid
+                        description: Internal transaction ID
+                      checkout_request_id:
+                        type: string
+                        description: M-Pesa checkout request ID
+                      status:
+                        type: string
+                        enum: [pending]
+                      message:
+                        type: string
+                        example: "Please check your phone for the M-Pesa prompt"
+                  meta:
+                    $ref: "common.yaml#/components/schemas/Meta"
+        "400":
+          description: Invalid amount or limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "common.yaml#/components/schemas/ErrorResponse"
+              examples:
+                minimum_amount:
+                  value:
+                    error:
+                      code: "PAYMENT_MINIMUM_AMOUNT"
+                      message: "Amount is below minimum allowed"
+                      details: ["Minimum deposit is KES 100"]
+                    meta:
+                      request_id: "550e8400-e29b-41d4-a716-446655440000"
+                      timestamp: "2026-01-31T12:00:00Z"
+                daily_limit:
+                  value:
+                    error:
+                      code: "PAYMENT_DAILY_LIMIT"
+                      message: "Daily transaction limit exceeded"
+                    meta:
+                      request_id: "550e8400-e29b-41d4-a716-446655440000"
+                      timestamp: "2026-01-31T12:00:00Z"
+        "401":
+          $ref: "common.yaml#/components/responses/Unauthorized"
+        "503":
+          description: M-Pesa service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "common.yaml#/components/schemas/ErrorResponse"
+
+  /payments/deposit/{id}/status:
+    get:
+      summary: Check deposit status
+      description: Returns the status of a pending deposit.
+      operationId: getDepositStatus
+      tags:
+        - Deposits
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "common.yaml#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Deposit status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Transaction"
+                  meta:
+                    $ref: "common.yaml#/components/schemas/Meta"
+        "401":
+          $ref: "common.yaml#/components/responses/Unauthorized"
+        "404":
+          $ref: "common.yaml#/components/responses/NotFound"
+
+  /payments/withdraw:
+    post:
+      summary: Initiate withdrawal
+      description: |
+        Initiates a B2C transfer to the user's registered M-Pesa number.
+
+        **Limits:**
+        - Minimum: KES 100
+        - Maximum: KES 70,000 per transaction
+        - Daily limit: KES 150,000
+
+        **Requirements:**
+        - KYC must be verified
+        - Sufficient available balance
+      operationId: initiateWithdrawal
+      tags:
+        - Withdrawals
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount:
+                  type: number
+                  format: double
+                  description: Amount in KES
+                  minimum: 100
+                  maximum: 70000
+                  example: 2000
+                pin:
+                  type: string
+                  description: User's 4-digit PIN for verification
+                  pattern: '^\d{4}$'
+              required:
+                - amount
+                - pin
+      responses:
+        "202":
+          description: Withdrawal initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      transaction_id:
+                        type: string
+                        format: uuid
+                      status:
+                        type: string
+                        enum: [pending]
+                      message:
+                        type: string
+                        example: "Withdrawal initiated. You will receive an M-Pesa message shortly."
+                  meta:
+                    $ref: "common.yaml#/components/schemas/Meta"
+        "400":
+          description: Invalid request or insufficient funds
+          content:
+            application/json:
+              schema:
+                $ref: "common.yaml#/components/schemas/ErrorResponse"
+              examples:
+                insufficient_funds:
+                  value:
+                    error:
+                      code: "PAYMENT_INSUFFICIENT_FUNDS"
+                      message: "Insufficient balance for this transaction"
+                    meta:
+                      request_id: "550e8400-e29b-41d4-a716-446655440000"
+                      timestamp: "2026-01-31T12:00:00Z"
+        "401":
+          $ref: "common.yaml#/components/responses/Unauthorized"
+        "403":
+          description: KYC required
+          content:
+            application/json:
+              schema:
+                $ref: "common.yaml#/components/schemas/ErrorResponse"
+
+  /payments/withdraw/{id}/status:
+    get:
+      summary: Check withdrawal status
+      description: Returns the status of a pending withdrawal.
+      operationId: getWithdrawalStatus
+      tags:
+        - Withdrawals
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "common.yaml#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Withdrawal status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Transaction"
+                  meta:
+                    $ref: "common.yaml#/components/schemas/Meta"
+        "401":
+          $ref: "common.yaml#/components/responses/Unauthorized"
+        "404":
+          $ref: "common.yaml#/components/responses/NotFound"
+
+components:
+  schemas:
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        wallet_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [deposit, withdrawal, trade_buy, trade_sell, fee]
+        status:
+          type: string
+          enum: [pending, completed, failed]
+        amount:
+          type: number
+          format: double
+          description: Transaction amount
+        currency:
+          type: string
+          example: "KES"
+        provider:
+          type: string
+          enum: [mpesa, card, bank]
+        provider_ref:
+          type: string
+          description: External reference (e.g., M-Pesa receipt number)
+        balance_before:
+          type: number
+          format: double
+        balance_after:
+          type: number
+          format: double
+        failure_reason:
+          type: string
+          description: Reason for failure (if status is failed)
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+
+  securitySchemes:
+    BearerAuth:
+      $ref: "common.yaml#/components/securitySchemes/BearerAuth"
