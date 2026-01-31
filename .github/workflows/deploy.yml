@@ -1,0 +1,81 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.inputs.environment == 'staging'
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials equishare-staging \
+            --zone ${{ vars.GCP_ZONE }} \
+            --project ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Deploy to GKE
+        run: |
+          kubectl apply -k infrastructure/k8s/staging/
+
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/api-gateway -n equishare --timeout=300s
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    if: github.event.inputs.environment == 'production'
+    environment: production
+    needs: [deploy-staging]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials equishare-production \
+            --zone ${{ vars.GCP_ZONE }} \
+            --project ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Deploy to GKE
+        run: |
+          kubectl apply -k infrastructure/k8s/production/
+
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/api-gateway -n equishare --timeout=300s

@@ -1,0 +1,44 @@
+version: 2
+updates:
+  - package-ecosystem: "gomod"
+    directory: "/pkg"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "go"
+
+  - package-ecosystem: "gomod"
+    directories:
+      - "/services/api-gateway"
+      - "/services/auth-service"
+      - "/services/user-service"
+      - "/services/trading-service"
+      - "/services/payment-service"
+      - "/services/ussd-service"
+      - "/services/notification-service"
+      - "/services/market-data-service"
+      - "/services/portfolio-service"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "go"
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "ci"
