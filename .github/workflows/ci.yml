@@ -147,7 +147,7 @@ jobs:
             type=sha,prefix=
             type=raw,value=latest
 
-      - uses: docker/build-push-action@v5
+      - uses: docker/build-push-action@v6
         with:
           context: .
           file: services/${{ matrix.service }}/Dockerfile
