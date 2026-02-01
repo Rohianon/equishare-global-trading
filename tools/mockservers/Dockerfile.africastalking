@@ -1,0 +1,24 @@
+FROM golang:1.22-alpine AS builder
+
+WORKDIR /app
+
+# Copy go mod files
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source
+COPY africastalking/ ./africastalking/
+
+# Build
+RUN CGO_ENABLED=0 GOOS=linux go build -o /africastalking-mock ./africastalking
+
+# Runtime image
+FROM alpine:3.19
+
+RUN apk --no-cache add wget ca-certificates
+
+COPY --from=builder /africastalking-mock /africastalking-mock
+
+EXPOSE 8091
+
+CMD ["/africastalking-mock"]

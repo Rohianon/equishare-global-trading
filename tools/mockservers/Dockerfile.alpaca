@@ -1,0 +1,24 @@
+FROM golang:1.22-alpine AS builder
+
+WORKDIR /app
+
+# Copy go mod files
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source
+COPY alpaca/ ./alpaca/
+
+# Build
+RUN CGO_ENABLED=0 GOOS=linux go build -o /alpaca-mock ./alpaca
+
+# Runtime image
+FROM alpine:3.19
+
+RUN apk --no-cache add wget ca-certificates
+
+COPY --from=builder /alpaca-mock /alpaca-mock
+
+EXPOSE 8092
+
+CMD ["/alpaca-mock"]
