@@ -187,7 +187,11 @@ func (h *Handler) Verify(c *fiber.Ctx) error {
 		logger.Error().Err(err).Msg("Failed to create wallet")
 	}
 
-	tokens, err := h.jwt.GenerateTokenPair(user.ID, user.Phone)
+	phone := ""
+	if user.Phone != nil {
+		phone = *user.Phone
+	}
+	tokens, err := h.jwt.GenerateTokenPair(user.ID, phone)
 	if err != nil {
 		logger.Error().Err(err).Msg("Failed to generate tokens")
 		return apperrors.ErrInternal
@@ -197,10 +201,12 @@ func (h *Handler) Verify(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusCreated).JSON(types.VerifyResponse{
 		User: types.UserResponse{
-			ID:        user.ID,
-			Phone:     user.Phone,
-			KYCStatus: user.KYCStatus,
-			KYCTier:   user.KYCTier,
+			ID:            user.ID,
+			Phone:         user.Phone,
+			KYCStatus:     user.KYCStatus,
+			KYCTier:       user.KYCTier,
+			PhoneVerified: user.PhoneVerified,
+			EmailVerified: user.EmailVerified,
 		},
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,
@@ -246,7 +252,11 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 		return apperrors.ErrInvalidCredentials
 	}
 
-	tokens, err := h.jwt.GenerateTokenPair(user.ID, user.Phone)
+	phone := ""
+	if user.Phone != nil {
+		phone = *user.Phone
+	}
+	tokens, err := h.jwt.GenerateTokenPair(user.ID, phone)
 	if err != nil {
 		logger.Error().Err(err).Msg("Failed to generate tokens")
 		return apperrors.ErrInternal
@@ -256,10 +266,12 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 
 	return c.JSON(types.VerifyResponse{
 		User: types.UserResponse{
-			ID:        user.ID,
-			Phone:     user.Phone,
-			KYCStatus: user.KYCStatus,
-			KYCTier:   user.KYCTier,
+			ID:            user.ID,
+			Phone:         user.Phone,
+			KYCStatus:     user.KYCStatus,
+			KYCTier:       user.KYCTier,
+			PhoneVerified: user.PhoneVerified,
+			EmailVerified: user.EmailVerified,
 		},
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,
@@ -288,7 +300,11 @@ func (h *Handler) RefreshToken(c *fiber.Ctx) error {
 		return apperrors.ErrForbidden.WithDetails("Account is deactivated")
 	}
 
-	tokens, err := h.jwt.GenerateTokenPair(user.ID, user.Phone)
+	phone := ""
+	if user.Phone != nil {
+		phone = *user.Phone
+	}
+	tokens, err := h.jwt.GenerateTokenPair(user.ID, phone)
 	if err != nil {
 		logger.Error().Err(err).Msg("Failed to generate tokens")
 		return apperrors.ErrInternal
