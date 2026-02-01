@@ -15,6 +15,30 @@ const STORAGE_KEYS = {
   REFRESH_TOKEN: 'refresh_token',
 };
 
+// Storage abstraction - SecureStore for native, localStorage for web
+const storage = {
+  async getItem(key: string): Promise<string | null> {
+    if (Platform.OS === 'web') {
+      return localStorage.getItem(key);
+    }
+    return SecureStore.getItemAsync(key);
+  },
+  async setItem(key: string, value: string): Promise<void> {
+    if (Platform.OS === 'web') {
+      localStorage.setItem(key, value);
+      return;
+    }
+    await SecureStore.setItemAsync(key, value);
+  },
+  async deleteItem(key: string): Promise<void> {
+    if (Platform.OS === 'web') {
+      localStorage.removeItem(key);
+      return;
+    }
+    await SecureStore.deleteItemAsync(key);
+  },
+};
+
 class ApiClient {
   private client: AxiosInstance;
   private isRefreshing = false;
@@ -36,7 +60,7 @@ class ApiClient {
     // Request interceptor - add auth token
     this.client.interceptors.request.use(
       async (config) => {
-        const token = await SecureStore.getItemAsync(STORAGE_KEYS.ACCESS_TOKEN);
+        const token = await storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
@@ -64,7 +88,7 @@ class ApiClient {
           this.isRefreshing = true;
 
           try {
-            const refreshToken = await SecureStore.getItemAsync(STORAGE_KEYS.REFRESH_TOKEN);
+            const refreshToken = await storage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
             if (!refreshToken) {
               throw new Error('No refresh token');
             }
@@ -96,21 +120,21 @@ class ApiClient {
   }
 
   async setTokens(accessToken: string, refreshToken: string) {
-    await SecureStore.setItemAsync(STORAGE_KEYS.ACCESS_TOKEN, accessToken);
-    await SecureStore.setItemAsync(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
+    await storage.setItem(STORAGE_KEYS.ACCESS_TOKEN, accessToken);
+    await storage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
   }
 
   async clearTokens() {
-    await SecureStore.deleteItemAsync(STORAGE_KEYS.ACCESS_TOKEN);
-    await SecureStore.deleteItemAsync(STORAGE_KEYS.REFRESH_TOKEN);
+    await storage.deleteItem(STORAGE_KEYS.ACCESS_TOKEN);
+    await storage.deleteItem(STORAGE_KEYS.REFRESH_TOKEN);
   }
 
   async getAccessToken() {
-    return SecureStore.getItemAsync(STORAGE_KEYS.ACCESS_TOKEN);
+    return storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
   }
 
   async hasTokens() {
-    const token = await SecureStore.getItemAsync(STORAGE_KEYS.ACCESS_TOKEN);
+    const token = await storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
     return !!token;
   }
 
