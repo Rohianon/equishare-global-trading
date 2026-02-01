@@ -122,6 +122,17 @@ serviceAccountKey.json
 # Project Specific
 # ================================
 
+# Service binaries (Go builds)
+services/*/auth-service
+services/*/payment-service
+services/*/api-gateway
+services/*/trading-service
+services/*/notification-service
+services/*/kyc-service
+services/*/fx-service
+services/*/analytics-service
+services/*/reporting-service
+
 # Local config overrides
 config.local.yaml
 config.dev.yaml
