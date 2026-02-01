@@ -1,0 +1,96 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: equishare-ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/rate-limit-connections: "10"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://app.equishare.com"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, PUT, POST, DELETE, PATCH, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,X-LANG,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,X-Api-Key,X-Device-Id,Authorization"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.equishare.com
+      secretName: equishare-tls
+  rules:
+    - host: api.equishare.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: prod-api-gateway
+                port:
+                  number: 8000
+
+---
+# Separate ingress for USSD callbacks (no rate limiting)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: equishare-ussd-ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - ussd.equishare.com
+      secretName: equishare-ussd-tls
+  rules:
+    - host: ussd.equishare.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: prod-ussd-service
+                port:
+                  number: 8005
+
+---
+# Separate ingress for M-Pesa callbacks (no rate limiting, specific IP whitelisting)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: equishare-mpesa-ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # Safaricom IP ranges should be whitelisted here
+    # nginx.ingress.kubernetes.io/whitelist-source-range: "196.201.214.0/24,196.201.216.0/24"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - mpesa.equishare.com
+      secretName: equishare-mpesa-tls
+  rules:
+    - host: mpesa.equishare.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: prod-payment-service
+                port:
+                  number: 8004
