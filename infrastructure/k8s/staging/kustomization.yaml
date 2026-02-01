@@ -1,0 +1,95 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: equishare-staging
+
+resources:
+  - ../base
+
+namePrefix: staging-
+
+commonLabels:
+  environment: staging
+
+configMapGenerator:
+  - name: equishare-config
+    literals:
+      - environment=staging
+      - database.host=postgres-staging.database.svc.cluster.local
+      - database.port=5432
+      - database.name=equishare_staging
+      - redis.host=redis-staging.cache.svc.cluster.local
+      - redis.port=6379
+      - kafka.brokers=kafka-staging.messaging.svc.cluster.local:9092
+      - telemetry.collector_url=http://jaeger.observability.svc.cluster.local:4317
+
+  - name: equishare-common-env
+    literals:
+      - EQUISHARE_SERVER_HOST=0.0.0.0
+      - EQUISHARE_ENV=staging
+      - EQUISHARE_DATABASE_HOST=postgres-staging.database.svc.cluster.local
+      - EQUISHARE_DATABASE_PORT=5432
+      - EQUISHARE_DATABASE_DATABASE=equishare_staging
+      - EQUISHARE_DATABASE_USER=equishare
+      - EQUISHARE_REDIS_HOST=redis-staging.cache.svc.cluster.local
+      - EQUISHARE_REDIS_PORT=6379
+      - EQUISHARE_KAFKA_BROKERS=kafka-staging.messaging.svc.cluster.local:9092
+      - EQUISHARE_TELEMETRY_ENABLED=true
+      - EQUISHARE_TELEMETRY_COLLECTOR_URL=http://jaeger.observability.svc.cluster.local:4317
+
+patches:
+  # Reduce replicas for staging
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+
+  # Reduce HPA min/max for staging
+  - target:
+      kind: HorizontalPodAutoscaler
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 2
+
+  # Reduce resources for staging
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 50m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 64Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: 200m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 256Mi
+
+images:
+  - name: ghcr.io/rohianon/equishare-api-gateway
+    newTag: staging
+  - name: ghcr.io/rohianon/equishare-auth-service
+    newTag: staging
+  - name: ghcr.io/rohianon/equishare-user-service
+    newTag: staging
+  - name: ghcr.io/rohianon/equishare-trading-service
+    newTag: staging
+  - name: ghcr.io/rohianon/equishare-payment-service
+    newTag: staging
+  - name: ghcr.io/rohianon/equishare-ussd-service
+    newTag: staging
+  - name: ghcr.io/rohianon/equishare-notification-service
+    newTag: staging
+  - name: ghcr.io/rohianon/equishare-market-data-service
+    newTag: staging
+  - name: ghcr.io/rohianon/equishare-portfolio-service
+    newTag: staging

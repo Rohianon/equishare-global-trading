@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portfolio-service
+  labels:
+    app.kubernetes.io/name: portfolio-service
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: portfolio-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: portfolio-service
+        app.kubernetes.io/component: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8008"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: equishare-service
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: portfolio-service
+          image: ghcr.io/rohianon/equishare-portfolio-service:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8008
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: equishare-common-env
+          env:
+            - name: EQUISHARE_SERVER_PORT
+              value: "8008"
+            - name: EQUISHARE_TELEMETRY_SERVICE_NAME
+              value: "portfolio-service"
+            - name: EQUISHARE_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: equishare-db-credentials
+                  key: password
+            - name: EQUISHARE_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: equishare-jwt-secret
+                  key: secret
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: portfolio-service
+                topologyKey: kubernetes.io/hostname

@@ -1,0 +1,105 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: equishare-production
+
+resources:
+  - ../base
+  - pdb.yaml
+  - ingress.yaml
+
+namePrefix: prod-
+
+commonLabels:
+  environment: production
+
+commonAnnotations:
+  app.kubernetes.io/environment: production
+
+configMapGenerator:
+  - name: equishare-config
+    literals:
+      - environment=production
+      - database.host=postgres-production.database.svc.cluster.local
+      - database.port=5432
+      - database.name=equishare_production
+      - redis.host=redis-production.cache.svc.cluster.local
+      - redis.port=6379
+      - kafka.brokers=kafka-production.messaging.svc.cluster.local:9092
+      - telemetry.collector_url=http://jaeger.observability.svc.cluster.local:4317
+
+  - name: equishare-common-env
+    literals:
+      - EQUISHARE_SERVER_HOST=0.0.0.0
+      - EQUISHARE_ENV=production
+      - EQUISHARE_DATABASE_HOST=postgres-production.database.svc.cluster.local
+      - EQUISHARE_DATABASE_PORT=5432
+      - EQUISHARE_DATABASE_DATABASE=equishare_production
+      - EQUISHARE_DATABASE_USER=equishare
+      - EQUISHARE_DATABASE_SSL_MODE=require
+      - EQUISHARE_REDIS_HOST=redis-production.cache.svc.cluster.local
+      - EQUISHARE_REDIS_PORT=6379
+      - EQUISHARE_KAFKA_BROKERS=kafka-production.messaging.svc.cluster.local:9092
+      - EQUISHARE_TELEMETRY_ENABLED=true
+      - EQUISHARE_TELEMETRY_SAMPLE_RATE=0.1
+      - EQUISHARE_TELEMETRY_COLLECTOR_URL=http://jaeger.observability.svc.cluster.local:4317
+
+patches:
+  # Add GKE Workload Identity annotation to service account
+  - target:
+      kind: ServiceAccount
+      name: equishare-service
+    patch: |-
+      - op: add
+        path: /metadata/annotations
+        value:
+          iam.gke.io/gcp-service-account: equishare-service@PROJECT_ID.iam.gserviceaccount.com
+
+  # Enable topology spread for production
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/topologySpreadConstraints
+        value:
+          - maxSkew: 1
+            topologyKey: topology.kubernetes.io/zone
+            whenUnsatisfiable: DoNotSchedule
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/part-of: equishare
+
+  # Add startup probe timeout
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/startupProbe
+        value:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 30
+
+images:
+  - name: ghcr.io/rohianon/equishare-api-gateway
+    newTag: v1.0.0
+  - name: ghcr.io/rohianon/equishare-auth-service
+    newTag: v1.0.0
+  - name: ghcr.io/rohianon/equishare-user-service
+    newTag: v1.0.0
+  - name: ghcr.io/rohianon/equishare-trading-service
+    newTag: v1.0.0
+  - name: ghcr.io/rohianon/equishare-payment-service
+    newTag: v1.0.0
+  - name: ghcr.io/rohianon/equishare-ussd-service
+    newTag: v1.0.0
+  - name: ghcr.io/rohianon/equishare-notification-service
+    newTag: v1.0.0
+  - name: ghcr.io/rohianon/equishare-market-data-service
+    newTag: v1.0.0
+  - name: ghcr.io/rohianon/equishare-portfolio-service
+    newTag: v1.0.0

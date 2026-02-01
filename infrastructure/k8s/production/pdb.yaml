@@ -1,0 +1,107 @@
+---
+# API Gateway PDB - Critical for availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api-gateway-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api-gateway
+
+---
+# Auth Service PDB
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: auth-service-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: auth-service
+
+---
+# Trading Service PDB - Critical for order execution
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: trading-service-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: trading-service
+
+---
+# Payment Service PDB - Critical for M-Pesa transactions
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: payment-service-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: payment-service
+
+---
+# Market Data Service PDB
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: market-data-service-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: market-data-service
+
+---
+# User Service PDB
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: user-service-pdb
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: user-service
+
+---
+# USSD Service PDB
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ussd-service-pdb
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ussd-service
+
+---
+# Notification Service PDB
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: notification-service-pdb
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: notification-service
+
+---
+# Portfolio Service PDB
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: portfolio-service-pdb
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: portfolio-service

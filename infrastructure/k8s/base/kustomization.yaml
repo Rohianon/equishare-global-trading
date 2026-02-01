@@ -1,0 +1,40 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: equishare
+
+resources:
+  - namespace.yaml
+  - service-account.yaml
+  - network-policy.yaml
+  - api-gateway/deployment.yaml
+  - api-gateway/service.yaml
+  - api-gateway/hpa.yaml
+  - auth-service/deployment.yaml
+  - auth-service/service.yaml
+  - auth-service/hpa.yaml
+  - user-service/deployment.yaml
+  - user-service/service.yaml
+  - user-service/hpa.yaml
+  - trading-service/deployment.yaml
+  - trading-service/service.yaml
+  - trading-service/hpa.yaml
+  - payment-service/deployment.yaml
+  - payment-service/service.yaml
+  - payment-service/hpa.yaml
+  - ussd-service/deployment.yaml
+  - ussd-service/service.yaml
+  - ussd-service/hpa.yaml
+  - notification-service/deployment.yaml
+  - notification-service/service.yaml
+  - notification-service/hpa.yaml
+  - market-data-service/deployment.yaml
+  - market-data-service/service.yaml
+  - market-data-service/hpa.yaml
+  - portfolio-service/deployment.yaml
+  - portfolio-service/service.yaml
+  - portfolio-service/hpa.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: equishare
+  app.kubernetes.io/managed-by: kustomize
