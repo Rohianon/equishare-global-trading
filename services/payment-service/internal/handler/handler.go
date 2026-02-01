@@ -96,9 +96,9 @@ func (h *Handler) Deposit(c *fiber.Ctx) error {
 
 	if h.publisher != nil {
 		h.publisher.Publish(ctx, events.TopicPaymentInitiated, &events.Event{
-			Type:   "payment.initiated",
-			Source: "payment-service",
-			Data: map[string]any{
+			EventType: events.EventTypePaymentInitiated,
+			Source:    "payment-service",
+			Payload: map[string]any{
 				"user_id":             userID,
 				"wallet_id":           wallet.ID,
 				"amount":              req.Amount,
@@ -182,9 +182,9 @@ func (h *Handler) STKCallback(c *fiber.Ctx) error {
 
 				if h.publisher != nil {
 					h.publisher.Publish(ctx, events.TopicPaymentCompleted, &events.Event{
-						Type:   "payment.completed",
-						Source: "payment-service",
-						Data: map[string]any{
+						EventType: events.EventTypePaymentCompleted,
+						Source:    "payment-service",
+						Payload: map[string]any{
 							"user_id":        mpesaTx.UserID,
 							"wallet_id":      wallet.ID,
 							"amount":         data.Amount,
@@ -212,9 +212,9 @@ func (h *Handler) STKCallback(c *fiber.Ctx) error {
 	} else {
 		if h.publisher != nil {
 			h.publisher.Publish(ctx, events.TopicPaymentFailed, &events.Event{
-				Type:   "payment.failed",
-				Source: "payment-service",
-				Data: map[string]any{
+				EventType: events.EventTypePaymentFailed,
+				Source:    "payment-service",
+				Payload: map[string]any{
 					"user_id":             mpesaTx.UserID,
 					"amount":              mpesaTx.Amount,
 					"result_code":         data.ResultCode,
@@ -247,8 +247,47 @@ func (h *Handler) GetWalletBalance(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"currency":       wallet.Currency,
-		"balance":        wallet.Balance,
-		"locked_balance": wallet.LockedBalance,
+		"currency":  wallet.Currency,
+		"available": wallet.Balance,
+		"pending":   wallet.LockedBalance,
+		"total":     wallet.Balance + wallet.LockedBalance,
+	})
+}
+
+func (h *Handler) GetTransactions(c *fiber.Ctx) error {
+	userID := c.Locals("user_id").(string)
+	ctx := c.Context()
+
+	page := c.QueryInt("page", 1)
+	perPage := c.QueryInt("per_page", 10)
+
+	transactions, total, err := h.walletRepo.GetTransactions(ctx, userID, page, perPage)
+	if err != nil {
+		logger.Error().Err(err).Str("user_id", userID).Msg("Failed to get transactions")
+		return apperrors.ErrInternal
+	}
+
+	txResponses := make([]fiber.Map, len(transactions))
+	for i, tx := range transactions {
+		description := ""
+		if tx.Description != nil {
+			description = *tx.Description
+		}
+		txResponses[i] = fiber.Map{
+			"id":          tx.ID,
+			"type":        tx.Type,
+			"amount":      tx.Amount,
+			"currency":    tx.Currency,
+			"status":      tx.Status,
+			"description": description,
+			"created_at":  tx.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"transactions": txResponses,
+		"total":        total,
+		"page":         page,
+		"per_page":     perPage,
 	})
 }

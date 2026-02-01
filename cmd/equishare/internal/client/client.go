@@ -112,7 +112,7 @@ func (c *Client) Register(phone, fullName string) (*RegisterResponse, error) {
 
 type VerifyRequest struct {
 	Phone string `json:"phone"`
-	Code  string `json:"code"`
+	OTP   string `json:"otp"`
 	PIN   string `json:"pin"`
 }
 
@@ -127,11 +127,11 @@ type AuthResponse struct {
 	} `json:"user"`
 }
 
-func (c *Client) Verify(phone, code, pin string) (*AuthResponse, error) {
+func (c *Client) Verify(phone, otp, pin string) (*AuthResponse, error) {
 	var resp AuthResponse
 	err := c.do("POST", "/api/v1/auth/verify", VerifyRequest{
 		Phone: phone,
-		Code:  code,
+		OTP:   otp,
 		PIN:   pin,
 	}, &resp)
 	return &resp, err

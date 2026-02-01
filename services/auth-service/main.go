@@ -16,6 +16,7 @@ import (
 	"github.com/Rohianon/equishare-global-trading/pkg/cache"
 	"github.com/Rohianon/equishare-global-trading/pkg/config"
 	"github.com/Rohianon/equishare-global-trading/pkg/database"
+	apperrors "github.com/Rohianon/equishare-global-trading/pkg/errors"
 	"github.com/Rohianon/equishare-global-trading/pkg/logger"
 	"github.com/Rohianon/equishare-global-trading/pkg/middleware"
 	"github.com/Rohianon/equishare-global-trading/pkg/sms"
@@ -146,10 +147,20 @@ func errorHandler(c *fiber.Ctx, err error) error {
 	code := fiber.StatusInternalServerError
 	message := "Internal Server Error"
 
-	var e *fiber.Error
-	if errors.As(err, &e) {
-		code = e.Code
-		message = e.Message
+	var appErr *apperrors.AppError
+	var fiberErr *fiber.Error
+
+	if errors.As(err, &appErr) {
+		code = appErr.HTTPStatus
+		message = appErr.Message
+		return c.Status(code).JSON(fiber.Map{
+			"error":   message,
+			"code":    appErr.Code,
+			"details": appErr.Details,
+		})
+	} else if errors.As(err, &fiberErr) {
+		code = fiberErr.Code
+		message = fiberErr.Message
 	}
 
 	return c.Status(code).JSON(fiber.Map{
