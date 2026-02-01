@@ -28,9 +28,11 @@ type Config struct {
 	Telemetry TelemetryConfig `mapstructure:"telemetry"`
 	JWT       JWTConfig       `mapstructure:"jwt"`
 	Auth      AuthConfig      `mapstructure:"auth"`
+	OAuth     OAuthConfig     `mapstructure:"oauth"`
 	MPesa     MPesaConfig     `mapstructure:"mpesa"`
 	KYC       KYCConfig       `mapstructure:"kyc"`
 	SMS       SMSConfig       `mapstructure:"sms"`
+	Email     EmailConfig     `mapstructure:"email"`
 	Alpaca    AlpacaConfig    `mapstructure:"alpaca"`
 }
 
@@ -134,6 +136,49 @@ type AlpacaConfig struct {
 	APISecret   string `mapstructure:"api_secret"`
 	BaseURL     string `mapstructure:"base_url"`
 	DataURL     string `mapstructure:"data_url"`
+}
+
+// OAuthConfig holds configuration for OAuth providers.
+type OAuthConfig struct {
+	Google    GoogleOAuthConfig    `mapstructure:"google"`
+	Apple     AppleOAuthConfig     `mapstructure:"apple"`
+	MagicLink MagicLinkConfig      `mapstructure:"magic_link"`
+}
+
+// GoogleOAuthConfig holds Google OAuth2 configuration.
+type GoogleOAuthConfig struct {
+	ClientID     string   `mapstructure:"client_id"`
+	ClientSecret string   `mapstructure:"client_secret"`
+	RedirectURIs []string `mapstructure:"redirect_uris"`
+	Scopes       []string `mapstructure:"scopes"`
+}
+
+// AppleOAuthConfig holds Apple Sign-In configuration.
+type AppleOAuthConfig struct {
+	ClientID     string   `mapstructure:"client_id"`     // Service ID
+	TeamID       string   `mapstructure:"team_id"`       // Apple Developer Team ID
+	KeyID        string   `mapstructure:"key_id"`        // Key ID from Apple
+	PrivateKey   string   `mapstructure:"private_key"`   // Path to .p8 file or PEM content
+	RedirectURIs []string `mapstructure:"redirect_uris"`
+}
+
+// MagicLinkConfig holds email magic link configuration.
+type MagicLinkConfig struct {
+	BaseURL    string        `mapstructure:"base_url"`    // Base URL for magic links
+	Expiry     time.Duration `mapstructure:"expiry"`      // Token expiry duration
+	FromEmail  string        `mapstructure:"from_email"`  // Sender email
+}
+
+// EmailConfig holds email sending configuration.
+type EmailConfig struct {
+	Provider   string `mapstructure:"provider"`    // sendgrid, ses, smtp
+	APIKey     string `mapstructure:"api_key"`     // SendGrid API key
+	FromEmail  string `mapstructure:"from_email"`
+	FromName   string `mapstructure:"from_name"`
+	SMTPHost   string `mapstructure:"smtp_host"`
+	SMTPPort   int    `mapstructure:"smtp_port"`
+	SMTPUser   string `mapstructure:"smtp_user"`
+	SMTPPass   string `mapstructure:"smtp_password"`
 }
 
 // =============================================================================
@@ -299,6 +344,30 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("alpaca.api_secret", "")
 	v.SetDefault("alpaca.base_url", "https://paper-api.alpaca.markets")
 	v.SetDefault("alpaca.data_url", "https://data.alpaca.markets")
+
+	// OAuth defaults
+	v.SetDefault("oauth.google.client_id", "")
+	v.SetDefault("oauth.google.client_secret", "")
+	v.SetDefault("oauth.google.redirect_uris", []string{})
+	v.SetDefault("oauth.google.scopes", []string{"openid", "email", "profile"})
+	v.SetDefault("oauth.apple.client_id", "")
+	v.SetDefault("oauth.apple.team_id", "")
+	v.SetDefault("oauth.apple.key_id", "")
+	v.SetDefault("oauth.apple.private_key", "")
+	v.SetDefault("oauth.apple.redirect_uris", []string{})
+	v.SetDefault("oauth.magic_link.base_url", "")
+	v.SetDefault("oauth.magic_link.expiry", 15*time.Minute)
+	v.SetDefault("oauth.magic_link.from_email", "")
+
+	// Email defaults
+	v.SetDefault("email.provider", "")
+	v.SetDefault("email.api_key", "")
+	v.SetDefault("email.from_email", "noreply@equishare.com")
+	v.SetDefault("email.from_name", "EquiShare")
+	v.SetDefault("email.smtp_host", "")
+	v.SetDefault("email.smtp_port", 587)
+	v.SetDefault("email.smtp_user", "")
+	v.SetDefault("email.smtp_password", "")
 }
 
 // =============================================================================
@@ -307,15 +376,18 @@ func setDefaults(v *viper.Viper) {
 
 // Requirements specifies which configuration sections are required.
 type Requirements struct {
-	Database  bool
-	Redis     bool
-	Kafka     bool
-	JWT       bool
-	MPesa     bool
-	KYC       bool
-	SMS       bool
-	Alpaca    bool
-	Telemetry bool
+	Database    bool
+	Redis       bool
+	Kafka       bool
+	JWT         bool
+	MPesa       bool
+	KYC         bool
+	SMS         bool
+	Alpaca      bool
+	Telemetry   bool
+	OAuthGoogle bool
+	OAuthApple  bool
+	Email       bool
 }
 
 // ValidationError contains details about configuration validation failures.
@@ -420,6 +492,45 @@ func Validate(cfg *Config, req Requirements) error {
 		}
 		if cfg.Telemetry.ServiceName == "" {
 			errors = append(errors, ValidationError{"telemetry.service_name", "required when telemetry is enabled"})
+		}
+	}
+
+	// Google OAuth validation
+	if req.OAuthGoogle {
+		if cfg.OAuth.Google.ClientID == "" {
+			errors = append(errors, ValidationError{"oauth.google.client_id", "required"})
+		}
+		if cfg.OAuth.Google.ClientSecret == "" {
+			errors = append(errors, ValidationError{"oauth.google.client_secret", "required"})
+		}
+	}
+
+	// Apple OAuth validation
+	if req.OAuthApple {
+		if cfg.OAuth.Apple.ClientID == "" {
+			errors = append(errors, ValidationError{"oauth.apple.client_id", "required"})
+		}
+		if cfg.OAuth.Apple.TeamID == "" {
+			errors = append(errors, ValidationError{"oauth.apple.team_id", "required"})
+		}
+		if cfg.OAuth.Apple.KeyID == "" {
+			errors = append(errors, ValidationError{"oauth.apple.key_id", "required"})
+		}
+		if cfg.OAuth.Apple.PrivateKey == "" {
+			errors = append(errors, ValidationError{"oauth.apple.private_key", "required"})
+		}
+	}
+
+	// Email validation
+	if req.Email {
+		if cfg.Email.Provider == "" {
+			errors = append(errors, ValidationError{"email.provider", "required"})
+		}
+		if cfg.Email.Provider == "sendgrid" && cfg.Email.APIKey == "" {
+			errors = append(errors, ValidationError{"email.api_key", "required for sendgrid"})
+		}
+		if cfg.Email.Provider == "smtp" && cfg.Email.SMTPHost == "" {
+			errors = append(errors, ValidationError{"email.smtp_host", "required for smtp"})
 		}
 	}
 
