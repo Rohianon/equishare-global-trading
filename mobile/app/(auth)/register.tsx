@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   Alert,
 } from 'react-native';
 import { router, Link } from 'expo-router';
@@ -14,24 +15,37 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../src/stores/authStore';
 
 export default function RegisterScreen() {
-  const [phone, setPhone] = useState('+254');
+  const [phone, setPhone] = useState('');
   const { register, isLoading, error, clearError } = useAuthStore();
 
+  const normalizePhone = (phone: string): string => {
+    let normalized = phone.replace(/[\s-]/g, '');
+    if (normalized.startsWith('07') || normalized.startsWith('01')) {
+      normalized = '+254' + normalized.slice(1);
+    } else if (normalized.startsWith('254')) {
+      normalized = '+' + normalized;
+    } else if (!normalized.startsWith('+')) {
+      normalized = '+254' + normalized;
+    }
+    return normalized;
+  };
+
   const handleRegister = async () => {
-    if (phone.length < 13) {
-      Alert.alert('Error', 'Please enter a valid Kenyan phone number (+254...)');
+    const normalizedPhone = normalizePhone(phone);
+    if (normalizedPhone.length < 13) {
+      Alert.alert('Error', 'Please enter a valid phone number');
       return;
     }
 
+    clearError();
     try {
-      const response = await register(phone);
+      const response = await register(normalizedPhone);
       router.push({
         pathname: '/(auth)/verify-otp',
-        params: { phone, expiresIn: response.expires_in.toString() },
+        params: { phone: normalizedPhone, expiresIn: response.expires_in.toString() },
       });
     } catch (err) {
-      Alert.alert('Registration Failed', error || 'Please try again');
-      clearError();
+      // Error is handled by the store
     }
   };
 
@@ -41,53 +55,58 @@ export default function RegisterScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backButtonText}>← Back</Text>
-        </TouchableOpacity>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.card}>
+            <Text style={styles.title}>Register</Text>
 
-        <View style={styles.header}>
-          <Text style={styles.title}>Create account</Text>
-          <Text style={styles.subtitle}>
-            Enter your phone number to get started. We'll send you a verification code.
-          </Text>
-        </View>
+            {error && (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            )}
 
-        <View style={styles.form}>
-          <Text style={styles.label}>Phone Number</Text>
-          <TextInput
-            style={styles.input}
-            value={phone}
-            onChangeText={setPhone}
-            placeholder="+254712345678"
-            keyboardType="phone-pad"
-            autoComplete="tel"
-            maxLength={13}
-            autoFocus
-          />
+            <View style={styles.form}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Phone Number</Text>
+                <TextInput
+                  style={styles.input}
+                  value={phone}
+                  onChangeText={setPhone}
+                  placeholder="0712345678"
+                  placeholderTextColor="#9ca3af"
+                  keyboardType="phone-pad"
+                  autoComplete="tel"
+                />
+                <Text style={styles.hint}>
+                  We'll send a verification code to this number
+                </Text>
+              </View>
 
-          <Text style={styles.hint}>
-            We'll send a verification code to this number via SMS
-          </Text>
+              <TouchableOpacity
+                style={[styles.button, isLoading && styles.buttonDisabled]}
+                onPress={handleRegister}
+                disabled={isLoading}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.buttonText}>
+                  {isLoading ? 'Sending code...' : 'Send verification code'}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-          <TouchableOpacity
-            style={[styles.button, isLoading && styles.buttonDisabled]}
-            onPress={handleRegister}
-            disabled={isLoading}
-          >
-            <Text style={styles.buttonText}>
-              {isLoading ? 'Sending code...' : 'Send verification code'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Already have an account?</Text>
-          <Link href="/(auth)/login" asChild>
-            <TouchableOpacity>
-              <Text style={styles.loginLink}>Log in</Text>
-            </TouchableOpacity>
-          </Link>
-        </View>
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Already have an account? </Text>
+              <Link href="/(auth)/login" asChild>
+                <TouchableOpacity>
+                  <Text style={styles.link}>Login</Text>
+                </TouchableOpacity>
+              </Link>
+            </View>
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -96,85 +115,101 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f9fafb',
   },
   keyboardView: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
     padding: 24,
   },
-  backButton: {
-    marginBottom: 24,
-  },
-  backButtonText: {
-    fontSize: 16,
-    color: '#10B981',
-    fontWeight: '500',
-  },
-  header: {
-    marginBottom: 32,
+  card: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: '#f3f4f6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: 24,
+    fontWeight: '700',
     color: '#111827',
-    marginBottom: 8,
+    textAlign: 'center',
+    marginBottom: 24,
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#6B7280',
-    lineHeight: 24,
+  errorBox: {
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  errorText: {
+    color: '#b91c1c',
+    fontSize: 14,
   },
   form: {
-    flex: 1,
+    gap: 16,
+  },
+  inputGroup: {
+    gap: 4,
   },
   label: {
     fontSize: 14,
     fontWeight: '500',
     color: '#374151',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   input: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 18,
-    letterSpacing: 1,
-    marginBottom: 12,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: '#111827',
   },
   hint: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 24,
+    fontSize: 13,
+    color: '#6b7280',
+    marginTop: 6,
   },
   button: {
-    backgroundColor: '#10B981',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: '#0284c7',
+    borderRadius: 8,
+    paddingVertical: 14,
     alignItems: 'center',
+    marginTop: 8,
   },
   buttonDisabled: {
-    opacity: 0.6,
+    opacity: 0.5,
   },
   buttonText: {
-    color: '#fff',
+    color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    alignItems: 'center',
+    marginTop: 20,
   },
   footerText: {
-    color: '#6B7280',
+    color: '#4b5563',
     fontSize: 14,
   },
-  loginLink: {
-    color: '#10B981',
+  link: {
+    color: '#0284c7',
     fontSize: 14,
     fontWeight: '600',
-    marginLeft: 4,
   },
 });

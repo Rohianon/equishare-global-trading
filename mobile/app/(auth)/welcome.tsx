@@ -12,7 +12,6 @@ WebBrowser.maybeCompleteAuthSession();
 // Generate a cryptographically random string for PKCE
 const generateCodeVerifier = async (length: number = 64): Promise<string> => {
   const bytes = await Crypto.getRandomBytesAsync(length);
-  // Use URL-safe base64 encoding
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
   return Array.from(bytes).map(b => chars[b % chars.length]).join('');
 };
@@ -22,18 +21,15 @@ export default function WelcomeScreen() {
 
   const handleGoogleLogin = async () => {
     try {
-      // Generate PKCE verifier
       const codeVerifier = await generateCodeVerifier(64);
       const redirectUri = AuthSession.makeRedirectUri({ scheme: 'equishare' });
 
-      // Get auth URL from backend
       const { authorization_url, state } = await authApi.initiateOAuth(
         'google',
         redirectUri,
         codeVerifier
       );
 
-      // Open browser for OAuth
       const result = await WebBrowser.openAuthSessionAsync(authorization_url, redirectUri);
 
       if (result.type === 'success' && result.url) {
@@ -113,60 +109,85 @@ export default function WelcomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.logoContainer}>
-          <Text style={styles.logoText}>📈</Text>
-        </View>
-        <Text style={styles.title}>EquiShare</Text>
-        <Text style={styles.subtitle}>Invest in global markets from Kenya</Text>
+      {/* Hero Section */}
+      <View style={styles.hero}>
+        <Text style={styles.title}>Welcome to EquiShare</Text>
+        <Text style={styles.subtitle}>
+          Trade equities globally with seamless M-Pesa integration.
+          Start investing in US stocks directly from Kenya.
+        </Text>
       </View>
 
-      <View style={styles.content}>
-        <Text style={styles.sectionTitle}>Get started</Text>
-
-        <TouchableOpacity style={styles.socialButton} onPress={handleGoogleLogin}>
-          <Text style={styles.socialIcon}>G</Text>
-          <Text style={styles.socialButtonText}>Continue with Google</Text>
-        </TouchableOpacity>
-
-        {Platform.OS === 'ios' && (
-          <TouchableOpacity
-            style={[styles.socialButton, styles.appleButton]}
-            onPress={handleAppleLogin}
-          >
-            <Text style={[styles.socialIcon, styles.appleIcon]}></Text>
-            <Text style={[styles.socialButtonText, styles.appleButtonText]}>
-              Continue with Apple
-            </Text>
+      {/* Auth Buttons */}
+      <View style={styles.authSection}>
+        <Link href="/(auth)/register" asChild>
+          <TouchableOpacity style={styles.primaryButton} activeOpacity={0.8}>
+            <Text style={styles.primaryButtonText}>Get Started</Text>
           </TouchableOpacity>
-        )}
+        </Link>
 
+        <Link href="/(auth)/login" asChild>
+          <TouchableOpacity style={styles.secondaryButton} activeOpacity={0.8}>
+            <Text style={styles.secondaryButtonText}>Login</Text>
+          </TouchableOpacity>
+        </Link>
+      </View>
+
+      {/* Feature Cards */}
+      <View style={styles.features}>
+        <View style={styles.card}>
+          <Text style={styles.cardNumber}>1</Text>
+          <Text style={styles.cardTitle}>Register</Text>
+          <Text style={styles.cardText}>
+            Sign up with your phone number and verify via SMS OTP
+          </Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardNumber}>2</Text>
+          <Text style={styles.cardTitle}>Fund Account</Text>
+          <Text style={styles.cardText}>
+            Deposit funds instantly using M-Pesa STK Push
+          </Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardNumber}>3</Text>
+          <Text style={styles.cardTitle}>Trade</Text>
+          <Text style={styles.cardText}>
+            Buy and sell fractional shares of US equities
+          </Text>
+        </View>
+      </View>
+
+      {/* Social Login Section */}
+      <View style={styles.socialSection}>
         <View style={styles.divider}>
           <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>or</Text>
+          <Text style={styles.dividerText}>or continue with</Text>
           <View style={styles.dividerLine} />
         </View>
 
-        <Link href="/(auth)/register" asChild>
-          <TouchableOpacity style={styles.phoneButton}>
-            <Text style={styles.phoneIcon}>📱</Text>
-            <Text style={styles.phoneButtonText}>Continue with Phone</Text>
+        <View style={styles.socialButtons}>
+          <TouchableOpacity
+            style={styles.socialButton}
+            onPress={handleGoogleLogin}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.socialIcon}>G</Text>
           </TouchableOpacity>
-        </Link>
-      </View>
 
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>Already have an account?</Text>
-        <Link href="/(auth)/login" asChild>
-          <TouchableOpacity>
-            <Text style={styles.loginLink}>Log in</Text>
-          </TouchableOpacity>
-        </Link>
+          {Platform.OS === 'ios' && (
+            <TouchableOpacity
+              style={[styles.socialButton, styles.appleButton]}
+              onPress={handleAppleLogin}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.appleIcon}></Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
-
-      <Text style={styles.disclaimer}>
-        By continuing, you agree to our Terms of Service and Privacy Policy
-      </Text>
     </SafeAreaView>
   );
 }
@@ -174,130 +195,134 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-    padding: 24,
+    backgroundColor: '#f9fafb',
+    paddingHorizontal: 24,
   },
-  header: {
+  hero: {
     alignItems: 'center',
-    marginTop: 40,
-    marginBottom: 48,
-  },
-  logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
-    backgroundColor: '#10B981',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  logoText: {
-    fontSize: 40,
+    paddingTop: 48,
+    paddingBottom: 32,
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
+    fontSize: 28,
+    fontWeight: '700',
     color: '#111827',
-    marginBottom: 8,
+    textAlign: 'center',
+    marginBottom: 16,
   },
   subtitle: {
     fontSize: 16,
-    color: '#6B7280',
+    color: '#4b5563',
     textAlign: 'center',
+    lineHeight: 24,
+    maxWidth: 320,
   },
-  content: {
-    flex: 1,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 16,
-  },
-  socialButton: {
+  authSection: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    gap: 12,
+    marginBottom: 32,
+  },
+  primaryButton: {
+    backgroundColor: '#0284c7',
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 10,
+  },
+  primaryButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  secondaryButton: {
+    backgroundColor: '#f3f4f6',
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 10,
+  },
+  secondaryButtonText: {
+    color: '#374151',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  features: {
+    gap: 12,
+    marginBottom: 32,
+  },
+  card: {
+    backgroundColor: '#ffffff',
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#f3f4f6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  appleButton: {
-    backgroundColor: '#000',
-    borderColor: '#000',
+  cardNumber: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#0284c7',
+    marginBottom: 8,
   },
-  socialIcon: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginRight: 12,
-    color: '#EA4335',
-  },
-  appleIcon: {
-    color: '#fff',
-  },
-  socialButtonText: {
+  cardTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#111827',
+    marginBottom: 4,
   },
-  appleButtonText: {
-    color: '#fff',
+  cardText: {
+    fontSize: 14,
+    color: '#4b5563',
+    lineHeight: 20,
+  },
+  socialSection: {
+    marginTop: 'auto',
+    paddingBottom: 24,
   },
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 24,
+    marginBottom: 20,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: '#e5e7eb',
   },
   dividerText: {
     marginHorizontal: 16,
-    color: '#9CA3AF',
-    fontSize: 14,
+    color: '#9ca3af',
+    fontSize: 13,
   },
-  phoneButton: {
+  socialButtons: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#10B981',
+    gap: 16,
+  },
+  socialButton: {
+    width: 56,
+    height: 56,
     borderRadius: 12,
-    padding: 16,
-  },
-  phoneIcon: {
-    fontSize: 20,
-    marginRight: 12,
-  },
-  phoneButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  footer: {
-    flexDirection: 'row',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
   },
-  footerText: {
-    color: '#6B7280',
-    fontSize: 14,
+  socialIcon: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#ea4335',
   },
-  loginLink: {
-    color: '#10B981',
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 4,
+  appleButton: {
+    backgroundColor: '#000000',
+    borderColor: '#000000',
   },
-  disclaimer: {
-    textAlign: 'center',
-    color: '#9CA3AF',
-    fontSize: 12,
-    lineHeight: 18,
+  appleIcon: {
+    fontSize: 22,
+    color: '#ffffff',
   },
 });
