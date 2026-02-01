@@ -23,7 +23,20 @@ build:
 	@go build ./services/notification-service/...
 	@go build ./services/market-data-service/...
 	@go build ./services/portfolio-service/...
+	@go build ./cmd/equishare/...
 	@echo "Build complete!"
+
+# Build CLI tool
+cli:
+	@echo "Building CLI..."
+	@cd cmd/equishare && go build -o ../../bin/equishare .
+	@echo "CLI built: bin/equishare"
+
+# Install CLI to GOPATH/bin
+cli-install:
+	@echo "Installing CLI..."
+	@cd cmd/equishare && go install .
+	@echo "CLI installed! Run 'equishare --help' to get started."
 
 # Build a specific service (usage: make build-service SVC=api-gateway)
 build-service:
@@ -155,6 +168,8 @@ clean:
 	@for dir in services/*/; do \
 		rm -rf $${dir}bin; \
 	done
+	rm -rf bin/
+	rm -f cmd/equishare/equishare
 	rm -f coverage.out coverage.html
 	@echo "Clean complete!"
 
@@ -171,6 +186,7 @@ sync:
 tidy:
 	@echo "Tidying all modules..."
 	@cd pkg && go mod tidy
+	@cd cmd/equishare && go mod tidy
 	@for dir in services/*/; do \
 		echo "  Tidying $${dir}..."; \
 		(cd $${dir} && go mod tidy); \
@@ -194,6 +210,8 @@ help:
 	@echo "Build:"
 	@echo "  make build           - Build all services"
 	@echo "  make build-service SVC=<name> - Build specific service"
+	@echo "  make cli             - Build CLI tool to bin/equishare"
+	@echo "  make cli-install     - Install CLI to GOPATH/bin"
 	@echo ""
 	@echo "Test:"
 	@echo "  make test            - Run all tests"
