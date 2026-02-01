@@ -1,0 +1,126 @@
+# =============================================================================
+# Sandbox Mode Docker Compose
+# =============================================================================
+# This compose file adds mock servers for external providers, enabling
+# integration tests to run without real API credentials.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.sandbox.yml up
+#
+# Or use the profile:
+#   docker compose --profile sandbox up
+# =============================================================================
+
+services:
+  # M-Pesa Mock Server
+  mpesa-mock:
+    build:
+      context: ./tools/mockservers
+      dockerfile: Dockerfile.mpesa
+    ports:
+      - "8090:8090"
+    environment:
+      - PORT=8090
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    profiles:
+      - sandbox
+
+  # Africa's Talking Mock Server
+  africastalking-mock:
+    build:
+      context: ./tools/mockservers
+      dockerfile: Dockerfile.africastalking
+    ports:
+      - "8091:8091"
+    environment:
+      - PORT=8091
+      - AT_API_KEY=sandbox-api-key
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8091/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    profiles:
+      - sandbox
+
+  # Alpaca Mock Server
+  alpaca-mock:
+    build:
+      context: ./tools/mockservers
+      dockerfile: Dockerfile.alpaca
+    ports:
+      - "8092:8092"
+    environment:
+      - PORT=8092
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8092/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    profiles:
+      - sandbox
+
+  # Override service configs to use mock servers
+  api-gateway-sandbox:
+    extends:
+      file: docker-compose.yml
+      service: api-gateway
+    environment:
+      - EQUISHARE_MPESA_ENVIRONMENT=sandbox
+      - EQUISHARE_MPESA_BASE_URL=http://mpesa-mock:8090
+      - EQUISHARE_SMS_SANDBOX=true
+      - EQUISHARE_SMS_BASE_URL=http://africastalking-mock:8091
+      - EQUISHARE_ALPACA_ENVIRONMENT=sandbox
+      - EQUISHARE_ALPACA_BASE_URL=http://alpaca-mock:8092
+    depends_on:
+      mpesa-mock:
+        condition: service_healthy
+      africastalking-mock:
+        condition: service_healthy
+      alpaca-mock:
+        condition: service_healthy
+    profiles:
+      - sandbox
+
+  payment-service-sandbox:
+    extends:
+      file: docker-compose.yml
+      service: payment-service
+    environment:
+      - EQUISHARE_MPESA_ENVIRONMENT=sandbox
+      - EQUISHARE_MPESA_BASE_URL=http://mpesa-mock:8090
+    depends_on:
+      mpesa-mock:
+        condition: service_healthy
+    profiles:
+      - sandbox
+
+  trading-service-sandbox:
+    extends:
+      file: docker-compose.yml
+      service: trading-service
+    environment:
+      - EQUISHARE_ALPACA_ENVIRONMENT=sandbox
+      - EQUISHARE_ALPACA_BASE_URL=http://alpaca-mock:8092
+    depends_on:
+      alpaca-mock:
+        condition: service_healthy
+    profiles:
+      - sandbox
+
+  notification-service-sandbox:
+    extends:
+      file: docker-compose.yml
+      service: notification-service
+    environment:
+      - EQUISHARE_SMS_SANDBOX=true
+      - EQUISHARE_SMS_BASE_URL=http://africastalking-mock:8091
+    depends_on:
+      africastalking-mock:
+        condition: service_healthy
+    profiles:
+      - sandbox

@@ -11,4 +11,6 @@ use (
 	./services/trading-service
 	./services/user-service
 	./services/ussd-service
+	./tests/integration
+	./tools/mockservers
 )
