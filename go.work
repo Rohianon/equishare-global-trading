@@ -1,6 +1,7 @@
 go 1.25.1
 
 use (
+	./cmd/equishare
 	./pkg
 	./services/api-gateway
 	./services/auth-service
