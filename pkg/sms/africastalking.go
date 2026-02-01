@@ -118,6 +118,8 @@ func NewMockClient() *MockClient {
 
 func (c *MockClient) Send(to, message string) error {
 	c.SentMessages = append(c.SentMessages, MockMessage{To: to, Message: message})
+	// Log for development - helps see OTPs in mock mode
+	fmt.Printf("[MOCK SMS] To: %s, Message: %s\n", to, message)
 	return nil
 }
 

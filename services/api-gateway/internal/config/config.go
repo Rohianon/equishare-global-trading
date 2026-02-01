@@ -46,8 +46,8 @@ func Load() *Config {
 
 		AuthServiceURL:    getEnv("AUTH_SERVICE_URL", "http://localhost:8001"),
 		UserServiceURL:    getEnv("USER_SERVICE_URL", "http://localhost:8002"),
-		PaymentServiceURL: getEnv("PAYMENT_SERVICE_URL", "http://localhost:8003"),
-		TradingServiceURL: getEnv("TRADING_SERVICE_URL", "http://localhost:8004"),
+		PaymentServiceURL: getEnv("PAYMENT_SERVICE_URL", "http://localhost:8004"),
+		TradingServiceURL: getEnv("TRADING_SERVICE_URL", "http://localhost:8003"),
 
 		CORSAllowOrigins: getEnvSlice("CORS_ALLOW_ORIGINS", []string{"*"}),
 

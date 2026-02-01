@@ -69,11 +69,12 @@ func main() {
 	app.Use(middleware.SecurityHeaders())
 
 	// CORS
+	allowCredentials := !contains(cfg.CORSAllowOrigins, "*")
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     joinStrings(cfg.CORSAllowOrigins),
 		AllowMethods:     "GET,POST,PUT,DELETE,PATCH,OPTIONS",
 		AllowHeaders:     "Origin,Content-Type,Accept,Authorization,X-Request-ID",
-		AllowCredentials: true,
+		AllowCredentials: allowCredentials,
 		MaxAge:           86400,
 	}))
 
@@ -109,27 +110,27 @@ func main() {
 
 	// Auth routes (no auth required)
 	auth := api.Group("/auth")
-	auth.Post("/register", p.ForwardWithPath(cfg.AuthServiceURL, "/api/v1/auth"))
-	auth.Post("/verify", p.ForwardWithPath(cfg.AuthServiceURL, "/api/v1/auth"))
-	auth.Post("/login", p.ForwardWithPath(cfg.AuthServiceURL, "/api/v1/auth"))
-	auth.Post("/refresh", p.ForwardWithPath(cfg.AuthServiceURL, "/api/v1/auth"))
+	auth.Post("/register", p.Forward(cfg.AuthServiceURL))
+	auth.Post("/verify", p.Forward(cfg.AuthServiceURL))
+	auth.Post("/login", p.Forward(cfg.AuthServiceURL))
+	auth.Post("/refresh", p.Forward(cfg.AuthServiceURL))
 
 	// Protected auth routes
 	authProtected := auth.Group("", middleware.Auth(cfg.JWTSecret))
-	authProtected.Post("/logout", p.ForwardWithPath(cfg.AuthServiceURL, "/api/v1/auth"))
-	authProtected.Get("/me", p.ForwardWithPath(cfg.AuthServiceURL, "/api/v1/auth"))
+	authProtected.Post("/logout", p.Forward(cfg.AuthServiceURL))
+	authProtected.Get("/me", p.Forward(cfg.AuthServiceURL))
 
 	// User routes (protected)
 	users := api.Group("/users", middleware.Auth(cfg.JWTSecret))
-	users.All("/*", p.ForwardWithPath(cfg.UserServiceURL, "/api/v1/users"))
+	users.All("/*", p.Forward(cfg.UserServiceURL))
 
 	// Payment routes (protected)
 	payments := api.Group("/payments", middleware.Auth(cfg.JWTSecret))
-	payments.All("/*", p.ForwardWithPath(cfg.PaymentServiceURL, "/api/v1/payments"))
+	payments.All("/*", p.Forward(cfg.PaymentServiceURL))
 
 	// Trading routes (protected)
 	trading := api.Group("/trading", middleware.Auth(cfg.JWTSecret))
-	trading.All("/*", p.ForwardWithPath(cfg.TradingServiceURL, "/api/v1/trading"))
+	trading.All("/*", p.Forward(cfg.TradingServiceURL))
 
 	// 404 handler
 	app.Use(h.NotFound)
@@ -176,4 +177,13 @@ func joinStrings(s []string) string {
 		result += str
 	}
 	return result
+}
+
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
 }

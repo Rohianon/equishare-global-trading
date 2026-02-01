@@ -60,6 +60,8 @@ var statusCmd = &cobra.Command{
 var (
 	phoneFlag    string
 	fullNameFlag string
+	otpFlag      string
+	pinFlag      string
 )
 
 func init() {
@@ -74,8 +76,11 @@ func init() {
 	registerCmd.Flags().StringVarP(&fullNameFlag, "name", "n", "", "full name")
 
 	verifyCmd.Flags().StringVarP(&phoneFlag, "phone", "p", "", "phone number")
+	verifyCmd.Flags().StringVar(&otpFlag, "otp", "", "OTP code")
+	verifyCmd.Flags().StringVar(&pinFlag, "pin", "", "PIN to set")
 
 	loginCmd.Flags().StringVarP(&phoneFlag, "phone", "p", "", "phone number")
+	loginCmd.Flags().StringVar(&pinFlag, "pin", "", "PIN")
 }
 
 func runRegister(cmd *cobra.Command, args []string) error {
@@ -116,8 +121,14 @@ func runVerify(cmd *cobra.Command, args []string) error {
 	}
 	phone = normalizePhone(phone)
 
-	code := prompt("OTP code")
-	pin := promptSecret("Set your PIN (4-6 digits)")
+	code := otpFlag
+	if code == "" {
+		code = prompt("OTP code")
+	}
+	pin := pinFlag
+	if pin == "" {
+		pin = promptSecret("Set your PIN (4-6 digits)")
+	}
 
 	c := client.New()
 	output.Info("Verifying...")
@@ -159,7 +170,10 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	}
 	phone = normalizePhone(phone)
 
-	pin := promptSecret("PIN")
+	pin := pinFlag
+	if pin == "" {
+		pin = promptSecret("PIN")
+	}
 
 	c := client.New()
 	output.Info("Logging in...")

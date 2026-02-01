@@ -66,3 +66,48 @@ func (r *WalletRepository) CreateTransaction(ctx context.Context, userID, wallet
 
 	return &tx, nil
 }
+
+func (r *WalletRepository) GetTransactions(ctx context.Context, userID string, page, perPage int) ([]types.Transaction, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	if perPage < 1 || perPage > 100 {
+		perPage = 10
+	}
+	offset := (page - 1) * perPage
+
+	var total int
+	err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM transactions WHERE user_id = $1`, userID).Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count transactions: %w", err)
+	}
+
+	rows, err := r.db.Query(ctx, `
+		SELECT id, user_id, wallet_id, type, status, amount, fee, currency, provider,
+		       provider_ref, description, completed_at, created_at, updated_at
+		FROM transactions
+		WHERE user_id = $1
+		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
+	`, userID, perPage, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get transactions: %w", err)
+	}
+	defer rows.Close()
+
+	var transactions []types.Transaction
+	for rows.Next() {
+		var tx types.Transaction
+		err := rows.Scan(
+			&tx.ID, &tx.UserID, &tx.WalletID, &tx.Type, &tx.Status, &tx.Amount, &tx.Fee,
+			&tx.Currency, &tx.Provider, &tx.ProviderRef, &tx.Description, &tx.CompletedAt,
+			&tx.CreatedAt, &tx.UpdatedAt,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to scan transaction: %w", err)
+		}
+		transactions = append(transactions, tx)
+	}
+
+	return transactions, total, nil
+}
