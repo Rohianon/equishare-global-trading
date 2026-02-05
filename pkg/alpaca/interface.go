@@ -28,6 +28,11 @@ type TradingClient interface {
 
 	// Market Data
 	GetQuote(ctx context.Context, symbol string) (*Quote, error)
+	GetMultiQuotes(ctx context.Context, symbols []string) (map[string]Quote, error)
+	GetBars(ctx context.Context, symbol string, params *GetBarsParams) ([]Bar, error)
+	GetClock(ctx context.Context) (*Clock, error)
+	GetCalendar(ctx context.Context, params *GetCalendarParams) ([]CalendarDay, error)
+	GetSnapshot(ctx context.Context, symbol string) (*Snapshot, error)
 }
 
 // Ensure Client and MockClient implement TradingClient
