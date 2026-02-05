@@ -165,18 +165,18 @@ func (h *Handler) PlaceOrder(c *fiber.Ctx) error {
 
 	// Publish order created event
 	if h.publisher != nil {
-		h.publisher.Publish(ctx, events.TopicOrderCreated, &events.Event{
-			Type:   "order.created",
-			Source: "trading-service",
-			Data: map[string]any{
-				"order_id":       order.ID,
-				"user_id":        userID,
-				"symbol":         req.Symbol,
-				"side":           req.Side,
-				"amount":         req.Amount,
+		h.publisher.Publish(ctx, events.TopicOrderCreated, events.NewEvent(
+			events.EventTypeOrderCreated,
+			"trading-service",
+			map[string]any{
+				"order_id":        order.ID,
+				"user_id":         userID,
+				"symbol":          req.Symbol,
+				"side":            req.Side,
+				"amount":          req.Amount,
 				"alpaca_order_id": alpacaOrder.ID,
 			},
-		})
+		))
 	}
 
 	logger.Info().
@@ -456,10 +456,10 @@ func (h *Handler) handleOrderFill(ctx context.Context, order *types.Order, alpac
 
 	// Publish event
 	if h.publisher != nil {
-		h.publisher.Publish(ctx, events.TopicOrderFilled, &events.Event{
-			Type:   "order.filled",
-			Source: "trading-service",
-			Data: map[string]any{
+		h.publisher.Publish(ctx, events.TopicOrderFilled, events.NewEvent(
+			events.EventTypeOrderFilled,
+			"trading-service",
+			map[string]any{
 				"order_id":         order.ID,
 				"user_id":          order.UserID,
 				"symbol":           order.Symbol,
@@ -467,7 +467,7 @@ func (h *Handler) handleOrderFill(ctx context.Context, order *types.Order, alpac
 				"filled_qty":       filledQty,
 				"filled_avg_price": filledAvgPrice,
 			},
-		})
+		))
 	}
 
 	logger.Info().
