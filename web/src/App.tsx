@@ -10,6 +10,9 @@ import Verify from './pages/Verify';
 import Dashboard from './pages/Dashboard';
 import Deposit from './pages/Deposit';
 import Transactions from './pages/Transactions';
+import Trade from './pages/Trade';
+import Portfolio from './pages/Portfolio';
+import Orders from './pages/Orders';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -52,6 +55,30 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <Transactions />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/trade"
+                element={
+                  <ProtectedRoute>
+                    <Trade />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/portfolio"
+                element={
+                  <ProtectedRoute>
+                    <Portfolio />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/orders"
+                element={
+                  <ProtectedRoute>
+                    <Orders />
                   </ProtectedRoute>
                 }
               />

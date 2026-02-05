@@ -59,6 +59,107 @@ export interface DepositResponse {
   message: string;
 }
 
+// Trading types
+export interface Asset {
+  id: string;
+  symbol: string;
+  name: string;
+  exchange: string;
+  class: string;
+  status: string;
+  tradable: boolean;
+  fractionable: boolean;
+}
+
+export interface AssetSearchResponse {
+  assets: Asset[];
+  total: number;
+}
+
+export interface Quote {
+  symbol: string;
+  bid_price: number;
+  bid_size: number;
+  ask_price: number;
+  ask_size: number;
+  mid_price: number;
+  spread: number;
+  timestamp: string;
+}
+
+export interface PlaceOrderRequest {
+  symbol: string;
+  side: 'buy' | 'sell';
+  amount?: number;
+  qty?: number;
+  source?: string;
+}
+
+export interface Order {
+  id: string;
+  user_id: string;
+  alpaca_order_id: string;
+  symbol: string;
+  side: string;
+  type: string;
+  amount: number;
+  qty: number;
+  filled_qty: number;
+  filled_avg_price: number;
+  status: string;
+  source: string;
+  failed_reason?: string;
+  filled_at?: string;
+  canceled_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlaceOrderResponse {
+  order_id: string;
+  alpaca_order_id: string;
+  symbol: string;
+  side: string;
+  amount: number;
+  status: string;
+  message: string;
+}
+
+export interface OrdersResponse {
+  orders: Order[];
+  count: number;
+}
+
+export interface Holding {
+  symbol: string;
+  quantity: number;
+  avg_cost_basis: number;
+  total_cost_basis: number;
+  current_price: number;
+  market_value: number;
+  unrealized_pl: number;
+  unrealized_pl_pct: number;
+  day_change: number;
+  day_change_pct: number;
+  allocation_pct: number;
+}
+
+export interface PortfolioSummary {
+  total_value: number;
+  total_cost_basis: number;
+  total_unrealized_pl: number;
+  total_unrealized_pl_pct: number;
+  day_change: number;
+  day_change_pct: number;
+  cash_balance: number;
+  holdings_count: number;
+}
+
+export interface PortfolioResponse {
+  summary: PortfolioSummary;
+  holdings: Holding[];
+}
+
 class ApiClient {
   private client: AxiosInstance;
   private accessToken: string | null = null;
@@ -182,6 +283,55 @@ class ApiClient {
     const { data } = await this.client.get<TransactionsResponse>(
       `/api/v1/payments/transactions?page=${page}&per_page=${perPage}`
     );
+    return data;
+  }
+
+  // Trading endpoints
+  async searchAssets(query: string, limit = 20): Promise<AssetSearchResponse> {
+    const { data } = await this.client.get<AssetSearchResponse>(
+      `/api/v1/market-data/assets/search?q=${encodeURIComponent(query)}&limit=${limit}`
+    );
+    return data;
+  }
+
+  async getQuote(symbol: string): Promise<Quote> {
+    const { data } = await this.client.get<Quote>(
+      `/api/v1/market-data/quotes/${symbol}`
+    );
+    return data;
+  }
+
+  async placeOrder(request: PlaceOrderRequest): Promise<PlaceOrderResponse> {
+    const { data } = await this.client.post<PlaceOrderResponse>(
+      '/api/v1/trading/orders',
+      { ...request, source: 'web' }
+    );
+    return data;
+  }
+
+  async getOrders(status?: string, limit = 50): Promise<OrdersResponse> {
+    let url = `/api/v1/trading/orders?limit=${limit}`;
+    if (status) {
+      url += `&status=${status}`;
+    }
+    const { data } = await this.client.get<OrdersResponse>(url);
+    return data;
+  }
+
+  async getOrder(orderId: string): Promise<Order> {
+    const { data } = await this.client.get<Order>(`/api/v1/trading/orders/${orderId}`);
+    return data;
+  }
+
+  async cancelOrder(orderId: string): Promise<{ message: string }> {
+    const { data } = await this.client.delete<{ message: string }>(
+      `/api/v1/trading/orders/${orderId}`
+    );
+    return data;
+  }
+
+  async getPortfolio(): Promise<PortfolioResponse> {
+    const { data } = await this.client.get<PortfolioResponse>('/api/v1/portfolio/portfolio');
     return data;
   }
 }
