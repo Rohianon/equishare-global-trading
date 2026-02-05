@@ -380,6 +380,165 @@ func (c *MockClient) GetQuote(ctx context.Context, symbol string) (*Quote, error
 	}, nil
 }
 
+// GetMultiQuotes returns mock quotes for multiple symbols
+func (c *MockClient) GetMultiQuotes(ctx context.Context, symbols []string) (map[string]Quote, error) {
+	quotes := make(map[string]Quote)
+	for _, symbol := range symbols {
+		quotes[symbol] = Quote{
+			Symbol:    symbol,
+			BidPrice:  149.50,
+			BidSize:   100,
+			AskPrice:  150.50,
+			AskSize:   100,
+			Timestamp: time.Now().Format(time.RFC3339),
+		}
+	}
+	return quotes, nil
+}
+
+// GetBars returns mock historical bars
+func (c *MockClient) GetBars(ctx context.Context, symbol string, params *GetBarsParams) ([]Bar, error) {
+	limit := 10
+	if params != nil && params.Limit > 0 {
+		limit = params.Limit
+		if limit > 100 {
+			limit = 100
+		}
+	}
+
+	bars := make([]Bar, limit)
+	basePrice := 150.0
+	now := time.Now()
+
+	for i := 0; i < limit; i++ {
+		dayOffset := limit - i - 1
+		bars[i] = Bar{
+			Timestamp:  now.AddDate(0, 0, -dayOffset),
+			Open:       basePrice + float64(i)*0.5,
+			High:       basePrice + float64(i)*0.5 + 2.0,
+			Low:        basePrice + float64(i)*0.5 - 1.0,
+			Close:      basePrice + float64(i)*0.5 + 1.0,
+			Volume:     1000000 + uint64(i*10000),
+			TradeCount: 5000 + uint64(i*100),
+			VWAP:       basePrice + float64(i)*0.5 + 0.5,
+		}
+	}
+	return bars, nil
+}
+
+// GetClock returns mock market clock
+func (c *MockClient) GetClock(ctx context.Context) (*Clock, error) {
+	now := time.Now()
+	hour := now.Hour()
+	weekday := now.Weekday()
+
+	// Market is open 9:30 AM - 4:00 PM ET, Monday-Friday
+	isOpen := weekday >= time.Monday && weekday <= time.Friday && hour >= 9 && hour < 16
+
+	nextOpen := now
+	nextClose := now
+
+	if isOpen {
+		nextClose = time.Date(now.Year(), now.Month(), now.Day(), 16, 0, 0, 0, now.Location())
+		nextOpen = nextClose.Add(17*time.Hour + 30*time.Minute) // Next day 9:30 AM
+	} else {
+		// Find next open (simplified)
+		nextOpen = time.Date(now.Year(), now.Month(), now.Day()+1, 9, 30, 0, 0, now.Location())
+		nextClose = time.Date(now.Year(), now.Month(), now.Day()+1, 16, 0, 0, 0, now.Location())
+	}
+
+	return &Clock{
+		Timestamp: now,
+		IsOpen:    isOpen,
+		NextOpen:  nextOpen,
+		NextClose: nextClose,
+	}, nil
+}
+
+// GetCalendar returns mock market calendar
+func (c *MockClient) GetCalendar(ctx context.Context, params *GetCalendarParams) ([]CalendarDay, error) {
+	calendar := make([]CalendarDay, 30)
+	now := time.Now()
+
+	for i := 0; i < 30; i++ {
+		day := now.AddDate(0, 0, i)
+		// Skip weekends
+		if day.Weekday() == time.Saturday || day.Weekday() == time.Sunday {
+			continue
+		}
+		calendar[i] = CalendarDay{
+			Date:  day.Format("2006-01-02"),
+			Open:  "09:30",
+			Close: "16:00",
+		}
+	}
+
+	// Filter out empty entries
+	filtered := make([]CalendarDay, 0)
+	for _, d := range calendar {
+		if d.Date != "" {
+			filtered = append(filtered, d)
+		}
+	}
+
+	return filtered, nil
+}
+
+// GetSnapshot returns a mock snapshot for a symbol
+func (c *MockClient) GetSnapshot(ctx context.Context, symbol string) (*Snapshot, error) {
+	now := time.Now()
+	basePrice := 150.0
+
+	return &Snapshot{
+		LatestTrade: &Trade{
+			Timestamp: now,
+			Price:     basePrice,
+			Size:      100,
+			Exchange:  "NASDAQ",
+			ID:        12345,
+			Tape:      "C",
+		},
+		LatestQuote: &Quote{
+			Symbol:    symbol,
+			BidPrice:  basePrice - 0.50,
+			BidSize:   100,
+			AskPrice:  basePrice + 0.50,
+			AskSize:   100,
+			Timestamp: now.Format(time.RFC3339),
+		},
+		MinuteBar: &Bar{
+			Timestamp:  now.Truncate(time.Minute),
+			Open:       basePrice - 0.25,
+			High:       basePrice + 0.50,
+			Low:        basePrice - 0.50,
+			Close:      basePrice,
+			Volume:     10000,
+			TradeCount: 50,
+			VWAP:       basePrice,
+		},
+		DailyBar: &Bar{
+			Timestamp:  now.Truncate(24 * time.Hour),
+			Open:       basePrice - 2.0,
+			High:       basePrice + 3.0,
+			Low:        basePrice - 3.0,
+			Close:      basePrice,
+			Volume:     5000000,
+			TradeCount: 25000,
+			VWAP:       basePrice - 0.5,
+		},
+		PrevDailyBar: &Bar{
+			Timestamp:  now.AddDate(0, 0, -1).Truncate(24 * time.Hour),
+			Open:       basePrice - 3.0,
+			High:       basePrice + 1.0,
+			Low:        basePrice - 4.0,
+			Close:      basePrice - 2.0,
+			Volume:     4500000,
+			TradeCount: 22000,
+			VWAP:       basePrice - 1.5,
+		},
+	}, nil
+}
+
 // SetAccountCash sets the mock account cash balance (for testing)
 func (c *MockClient) SetAccountCash(cash string) {
 	c.mu.Lock()
