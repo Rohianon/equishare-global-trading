@@ -160,6 +160,29 @@ export interface PortfolioResponse {
   holdings: Holding[];
 }
 
+export interface Bar {
+  timestamp: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  trade_count?: number;
+  vwap?: number;
+}
+
+export interface BarsResponse {
+  symbol: string;
+  bars: Bar[];
+}
+
+export interface GetBarsParams {
+  timeframe?: string;
+  start?: string;
+  end?: string;
+  limit?: number;
+}
+
 class ApiClient {
   private client: AxiosInstance;
   private accessToken: string | null = null;
@@ -332,6 +355,26 @@ class ApiClient {
 
   async getPortfolio(): Promise<PortfolioResponse> {
     const { data } = await this.client.get<PortfolioResponse>('/api/v1/portfolio/portfolio');
+    return data;
+  }
+
+  async getBars(symbol: string, params?: GetBarsParams): Promise<BarsResponse> {
+    const queryParams = new URLSearchParams();
+    if (params?.timeframe) queryParams.set('timeframe', params.timeframe);
+    if (params?.start) queryParams.set('start', params.start);
+    if (params?.end) queryParams.set('end', params.end);
+    if (params?.limit) queryParams.set('limit', params.limit.toString());
+
+    const { data } = await this.client.get<BarsResponse>(
+      `/api/v1/market-data/bars/${symbol}?${queryParams.toString()}`
+    );
+    return data;
+  }
+
+  async getAsset(symbol: string): Promise<Asset> {
+    const { data } = await this.client.get<Asset>(
+      `/api/v1/market-data/assets/${symbol}`
+    );
     return data;
   }
 }

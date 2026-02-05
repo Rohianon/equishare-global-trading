@@ -11,6 +11,7 @@ import Dashboard from './pages/Dashboard';
 import Deposit from './pages/Deposit';
 import Transactions from './pages/Transactions';
 import Trade from './pages/Trade';
+import Stock from './pages/Stock';
 import Portfolio from './pages/Portfolio';
 import Orders from './pages/Orders';
 
@@ -63,6 +64,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <Trade />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/stock/:symbol"
+                element={
+                  <ProtectedRoute>
+                    <Stock />
                   </ProtectedRoute>
                 }
               />

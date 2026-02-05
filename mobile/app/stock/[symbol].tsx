@@ -15,15 +15,29 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { tradingApi } from '../../src/api/trading';
+import { useWebSocket } from '../../src/hooks/useWebSocket';
+import StockChart from '../../src/components/StockChart';
 
 export default function StockDetailScreen() {
   const { symbol } = useLocalSearchParams<{ symbol: string }>();
   const queryClient = useQueryClient();
+  const { subscribe, unsubscribe, quotes, isConnected } = useWebSocket();
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [amount, setAmount] = useState('');
   const [showOrderForm, setShowOrderForm] = useState(false);
 
-  // Fetch quote
+  // Subscribe to real-time updates
+  useEffect(() => {
+    if (symbol) {
+      subscribe([symbol]);
+      return () => unsubscribe([symbol]);
+    }
+  }, [symbol, subscribe, unsubscribe]);
+
+  // Get real-time quote from WebSocket
+  const liveQuote = symbol ? quotes.get(symbol.toUpperCase()) : null;
+
+  // Fetch quote (fallback)
   const { data: quote, isLoading: quoteLoading, refetch: refetchQuote } = useQuery({
     queryKey: ['quote', symbol],
     queryFn: () => tradingApi.getQuote(symbol!),
@@ -116,7 +130,9 @@ export default function StockDetailScreen() {
     }).format(value);
   };
 
-  const estimatedShares = amount && quote ? parseFloat(amount) / quote.mid_price : 0;
+  // Use live quote if available, otherwise fall back to REST quote
+  const currentQuote = liveQuote || quote;
+  const estimatedShares = amount && currentQuote ? parseFloat(amount) / currentQuote.mid_price : 0;
 
   if (!symbol) {
     return (
@@ -141,36 +157,41 @@ export default function StockDetailScreen() {
             <Text style={styles.symbol}>{symbol}</Text>
             {asset && <Text style={styles.name}>{asset.name}</Text>}
           </View>
-          <TouchableOpacity onPress={() => refetchQuote()} style={styles.refreshButton}>
-            <Text style={styles.refreshText}>Refresh</Text>
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            <View style={[styles.statusIndicator, isConnected ? styles.connected : styles.disconnected]}>
+              <Text style={styles.statusText}>{isConnected ? 'Live' : 'Delayed'}</Text>
+            </View>
+            <TouchableOpacity onPress={() => refetchQuote()} style={styles.refreshButton}>
+              <Text style={styles.refreshText}>Refresh</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <ScrollView style={styles.content}>
           {/* Quote Card */}
           <View style={styles.quoteCard}>
-            {quoteLoading ? (
+            {quoteLoading && !currentQuote ? (
               <ActivityIndicator size="large" color="#10B981" />
-            ) : quote ? (
+            ) : currentQuote ? (
               <>
-                <Text style={styles.price}>{formatCurrency(quote.mid_price)}</Text>
+                <Text style={styles.price}>{formatCurrency(currentQuote.mid_price)}</Text>
                 <View style={styles.quoteGrid}>
                   <View style={styles.quoteItem}>
                     <Text style={styles.quoteLabel}>Bid</Text>
-                    <Text style={styles.quoteValue}>{formatCurrency(quote.bid_price)}</Text>
+                    <Text style={styles.quoteValue}>{formatCurrency(currentQuote.bid_price)}</Text>
                   </View>
                   <View style={styles.quoteItem}>
                     <Text style={styles.quoteLabel}>Ask</Text>
-                    <Text style={styles.quoteValue}>{formatCurrency(quote.ask_price)}</Text>
+                    <Text style={styles.quoteValue}>{formatCurrency(currentQuote.ask_price)}</Text>
                   </View>
                   <View style={styles.quoteItem}>
                     <Text style={styles.quoteLabel}>Spread</Text>
-                    <Text style={styles.quoteValue}>{formatCurrency(quote.spread)}</Text>
+                    <Text style={styles.quoteValue}>{formatCurrency(currentQuote.spread)}</Text>
                   </View>
                   <View style={styles.quoteItem}>
                     <Text style={styles.quoteLabel}>Updated</Text>
                     <Text style={styles.quoteValue}>
-                      {new Date(quote.timestamp).toLocaleTimeString()}
+                      {new Date(currentQuote.timestamp).toLocaleTimeString()}
                     </Text>
                   </View>
                 </View>
@@ -184,6 +205,9 @@ export default function StockDetailScreen() {
               <Text style={styles.errorText}>Unable to load quote</Text>
             )}
           </View>
+
+          {/* Price Chart */}
+          <StockChart symbol={symbol} height={250} />
 
           {/* Balance Card */}
           <View style={styles.balanceCard}>
@@ -248,7 +272,7 @@ export default function StockDetailScreen() {
               </View>
 
               {/* Order Preview */}
-              {amount && parseFloat(amount) > 0 && quote && (
+              {amount && parseFloat(amount) > 0 && currentQuote && (
                 <View style={styles.orderPreview}>
                   <View style={styles.previewRow}>
                     <Text style={styles.previewLabel}>Estimated shares</Text>
@@ -258,7 +282,7 @@ export default function StockDetailScreen() {
                   </View>
                   <View style={styles.previewRow}>
                     <Text style={styles.previewLabel}>Price per share</Text>
-                    <Text style={styles.previewValue}>{formatCurrency(quote.mid_price)}</Text>
+                    <Text style={styles.previewValue}>{formatCurrency(currentQuote.mid_price)}</Text>
                   </View>
                   <View style={[styles.previewRow, styles.previewTotal]}>
                     <Text style={styles.previewTotalLabel}>Total</Text>
@@ -348,6 +372,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     marginTop: 2,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  statusIndicator: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  connected: {
+    backgroundColor: '#ECFDF5',
+  },
+  disconnected: {
+    backgroundColor: '#FEF3C7',
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#10B981',
   },
   refreshButton: {
     padding: 8,
