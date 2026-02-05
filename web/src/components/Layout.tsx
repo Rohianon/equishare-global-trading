@@ -33,16 +33,28 @@ export default function Layout({ children }: LayoutProps) {
                     Dashboard
                   </Link>
                   <Link
+                    to="/trade"
+                    className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                  >
+                    Trade
+                  </Link>
+                  <Link
+                    to="/portfolio"
+                    className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                  >
+                    Portfolio
+                  </Link>
+                  <Link
+                    to="/orders"
+                    className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                  >
+                    Orders
+                  </Link>
+                  <Link
                     to="/deposit"
                     className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
                   >
                     Deposit
-                  </Link>
-                  <Link
-                    to="/transactions"
-                    className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
-                  >
-                    Transactions
                   </Link>
                 </div>
               )}
