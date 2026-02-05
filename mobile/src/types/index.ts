@@ -120,6 +120,89 @@ export interface SearchResult {
   type: string;
 }
 
+// Extended Quote with bid/ask
+export interface DetailedQuote {
+  symbol: string;
+  bid_price: number;
+  bid_size: number;
+  ask_price: number;
+  ask_size: number;
+  mid_price: number;
+  spread: number;
+  timestamp: string;
+}
+
+// Asset from search
+export interface Asset {
+  id: string;
+  symbol: string;
+  name: string;
+  exchange: string;
+  class: string;
+  status: string;
+  tradable: boolean;
+  fractionable: boolean;
+}
+
+// Portfolio types
+export interface PortfolioSummary {
+  total_value: number;
+  total_cost_basis: number;
+  total_unrealized_pl: number;
+  total_unrealized_pl_pct: number;
+  day_change: number;
+  day_change_pct: number;
+  cash_balance: number;
+  holdings_count: number;
+}
+
+export interface PortfolioHolding {
+  symbol: string;
+  quantity: number;
+  avg_cost_basis: number;
+  total_cost_basis: number;
+  current_price: number;
+  market_value: number;
+  unrealized_pl: number;
+  unrealized_pl_pct: number;
+  day_change: number;
+  day_change_pct: number;
+  allocation_pct: number;
+}
+
+export interface Portfolio {
+  summary: PortfolioSummary;
+  holdings: PortfolioHolding[];
+}
+
+// Order response types
+export interface PlaceOrderRequest {
+  symbol: string;
+  side: 'buy' | 'sell';
+  amount?: number;
+  qty?: number;
+}
+
+export interface PlaceOrderResponse {
+  order_id: string;
+  alpaca_order_id: string;
+  symbol: string;
+  side: string;
+  amount: number;
+  status: string;
+  message: string;
+}
+
+export interface OrdersResponse {
+  orders: Order[];
+  count: number;
+}
+
+export interface AssetSearchResponse {
+  assets: Asset[];
+  total: number;
+}
+
 // API response wrapper
 export interface ApiResponse<T> {
   data?: T;
