@@ -13,13 +13,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import apiClient from '../../src/api/client';
+import { tradingApi } from '../../src/api/trading';
 import { useDebouncedCallback } from '../../src/hooks/useDebounce';
-import type { SearchResult, Quote } from '../../src/types';
+import type { Asset, Quote } from '../../src/types';
 
 export default function TradeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchResults, setSearchResults] = useState<Asset[]>([]);
 
   // Featured stocks
   const { data: featuredData } = useQuery({
@@ -39,11 +40,8 @@ export default function TradeScreen() {
 
     setIsSearching(true);
     try {
-      const results = await apiClient.get<{ results: SearchResult[] }>(
-        '/trading/search',
-        { q: query }
-      );
-      setSearchResults(results.results || []);
+      const results = await tradingApi.searchAssets(query);
+      setSearchResults(results.assets || []);
     } catch (error) {
       console.error('Search error:', error);
       setSearchResults([]);
@@ -98,7 +96,7 @@ export default function TradeScreen() {
       {searchQuery.length > 0 ? (
         <FlatList
           data={searchResults}
-          keyExtractor={(item) => item.symbol}
+          keyExtractor={(item) => item.id}
           style={styles.searchResults}
           ListEmptyComponent={
             !isSearching ? (
@@ -111,7 +109,7 @@ export default function TradeScreen() {
               </View>
             ) : null
           }
-          renderItem={({ item }) => (
+          renderItem={({ item }: { item: Asset }) => (
             <TouchableOpacity
               style={styles.searchResultItem}
               onPress={() => navigateToStock(item.symbol)}
@@ -122,7 +120,12 @@ export default function TradeScreen() {
                   {item.name}
                 </Text>
               </View>
-              <Text style={styles.resultExchange}>{item.exchange}</Text>
+              <View style={styles.resultMeta}>
+                <Text style={styles.resultExchange}>{item.exchange}</Text>
+                {item.fractionable && (
+                  <Text style={styles.fractionableTag}>Fractional</Text>
+                )}
+              </View>
             </TouchableOpacity>
           )}
         />
@@ -256,12 +259,24 @@ const styles = StyleSheet.create({
     marginTop: 2,
     maxWidth: 200,
   },
+  resultMeta: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
   resultExchange: {
     fontSize: 12,
     color: '#9CA3AF',
     backgroundColor: '#F3F4F6',
     paddingHorizontal: 8,
     paddingVertical: 4,
+    borderRadius: 4,
+  },
+  fractionableTag: {
+    fontSize: 10,
+    color: '#10B981',
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: 4,
   },
   emptySearch: {

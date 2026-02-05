@@ -1,20 +1,19 @@
-import { View, Text, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
-import apiClient from '../../src/api/client';
-import type { Holding } from '../../src/types';
+import { router } from 'expo-router';
+import { tradingApi } from '../../src/api/trading';
+import type { PortfolioHolding } from '../../src/types';
 
 export default function PortfolioScreen() {
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ['holdings'],
-    queryFn: () => apiClient.get<{ holdings: Holding[] }>('/trading/holdings'),
+  const { data: portfolio, isLoading, refetch } = useQuery({
+    queryKey: ['portfolio'],
+    queryFn: () => tradingApi.getPortfolio(),
+    refetchInterval: 30000,
   });
 
-  const holdings = data?.holdings || [];
-  const totalValue = holdings.reduce((sum, h) => sum + h.market_value, 0);
-  const totalCost = holdings.reduce((sum, h) => sum + h.avg_cost * h.quantity, 0);
-  const totalPL = totalValue - totalCost;
-  const totalPLPercent = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
+  const summary = portfolio?.summary;
+  const holdings = portfolio?.holdings || [];
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -31,25 +30,46 @@ export default function PortfolioScreen() {
         {/* Portfolio Summary */}
         <View style={styles.summaryCard}>
           <Text style={styles.summaryLabel}>Total Portfolio Value</Text>
-          <Text style={styles.summaryValue}>${totalValue.toFixed(2)}</Text>
+          <Text style={styles.summaryValue}>
+            ${(summary?.total_value ?? 0).toFixed(2)}
+          </Text>
           <View style={styles.plContainer}>
             <Text
               style={[
                 styles.plValue,
-                totalPL >= 0 ? styles.positive : styles.negative,
+                (summary?.total_unrealized_pl ?? 0) >= 0 ? styles.positive : styles.negative,
               ]}
             >
-              {totalPL >= 0 ? '+' : ''}${totalPL.toFixed(2)}
+              {(summary?.total_unrealized_pl ?? 0) >= 0 ? '+' : ''}${(summary?.total_unrealized_pl ?? 0).toFixed(2)}
             </Text>
             <Text
               style={[
                 styles.plPercent,
-                totalPL >= 0 ? styles.positive : styles.negative,
+                (summary?.total_unrealized_pl_pct ?? 0) >= 0 ? styles.positive : styles.negative,
               ]}
             >
-              ({totalPL >= 0 ? '+' : ''}{totalPLPercent.toFixed(2)}%)
+              ({(summary?.total_unrealized_pl_pct ?? 0) >= 0 ? '+' : ''}{(summary?.total_unrealized_pl_pct ?? 0).toFixed(2)}%)
             </Text>
           </View>
+          {summary && (
+            <View style={styles.summaryDetails}>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryDetailLabel}>Day Change</Text>
+                <Text
+                  style={[
+                    styles.summaryDetailValue,
+                    summary.day_change >= 0 ? styles.positive : styles.negative,
+                  ]}
+                >
+                  {summary.day_change >= 0 ? '+' : ''}${summary.day_change.toFixed(2)} ({summary.day_change >= 0 ? '+' : ''}{summary.day_change_pct.toFixed(2)}%)
+                </Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryDetailLabel}>Cash Balance</Text>
+                <Text style={styles.summaryDetailValue}>${summary.cash_balance.toFixed(2)}</Text>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Holdings List */}
@@ -63,15 +83,25 @@ export default function PortfolioScreen() {
               <Text style={styles.emptyText}>
                 Buy your first stock to start building your portfolio
               </Text>
+              <TouchableOpacity
+                style={styles.emptyButton}
+                onPress={() => router.push('/(tabs)/trade')}
+              >
+                <Text style={styles.emptyButtonText}>Start Trading</Text>
+              </TouchableOpacity>
             </View>
           ) : (
             <View style={styles.holdingsList}>
-              {holdings.map((holding) => (
-                <View key={holding.id} style={styles.holdingCard}>
+              {holdings.map((holding: PortfolioHolding) => (
+                <TouchableOpacity
+                  key={holding.symbol}
+                  style={styles.holdingCard}
+                  onPress={() => router.push({ pathname: '/stock/[symbol]', params: { symbol: holding.symbol } })}
+                >
                   <View style={styles.holdingHeader}>
                     <View>
                       <Text style={styles.holdingSymbol}>{holding.symbol}</Text>
-                      <Text style={styles.holdingName}>{holding.name}</Text>
+                      <Text style={styles.holdingShares}>{holding.quantity.toFixed(6)} shares</Text>
                     </View>
                     <View style={styles.holdingPriceContainer}>
                       <Text style={styles.holdingPrice}>
@@ -80,30 +110,26 @@ export default function PortfolioScreen() {
                       <Text
                         style={[
                           styles.holdingChange,
-                          holding.unrealized_pl >= 0 ? styles.positive : styles.negative,
+                          holding.unrealized_pl_pct >= 0 ? styles.positive : styles.negative,
                         ]}
                       >
-                        {holding.unrealized_pl >= 0 ? '+' : ''}
-                        {holding.unrealized_pl_percent.toFixed(2)}%
+                        {holding.unrealized_pl_pct >= 0 ? '+' : ''}
+                        {holding.unrealized_pl_pct.toFixed(2)}%
                       </Text>
                     </View>
                   </View>
 
                   <View style={styles.holdingDetails}>
                     <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Shares</Text>
-                      <Text style={styles.detailValue}>{holding.quantity}</Text>
+                      <Text style={styles.detailLabel}>Market Value</Text>
+                      <Text style={styles.detailValue}>
+                        ${holding.market_value.toFixed(2)}
+                      </Text>
                     </View>
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Avg Cost</Text>
                       <Text style={styles.detailValue}>
-                        ${holding.avg_cost.toFixed(2)}
-                      </Text>
-                    </View>
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Market Value</Text>
-                      <Text style={styles.detailValue}>
-                        ${holding.market_value.toFixed(2)}
+                        ${holding.avg_cost_basis.toFixed(2)}
                       </Text>
                     </View>
                     <View style={styles.detailRow}>
@@ -118,8 +144,14 @@ export default function PortfolioScreen() {
                         {holding.unrealized_pl.toFixed(2)}
                       </Text>
                     </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Allocation</Text>
+                      <Text style={styles.detailValue}>
+                        {holding.allocation_pct.toFixed(1)}%
+                      </Text>
+                    </View>
                   </View>
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
           )}
@@ -178,6 +210,27 @@ const styles = StyleSheet.create({
   plPercent: {
     fontSize: 14,
   },
+  summaryDetails: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    width: '100%',
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  summaryDetailLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  summaryDetailValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#111827',
+  },
   positive: {
     color: '#10B981',
   },
@@ -213,6 +266,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     textAlign: 'center',
+    marginBottom: 16,
+  },
+  emptyButton: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  emptyButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 16,
   },
   holdingsList: {
     gap: 12,
@@ -236,7 +301,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111827',
   },
-  holdingName: {
+  holdingShares: {
     fontSize: 14,
     color: '#6B7280',
     marginTop: 4,
