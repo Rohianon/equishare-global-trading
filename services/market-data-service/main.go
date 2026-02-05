@@ -7,14 +7,17 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/gofiber/websocket/v2"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/google/uuid"
 
 	"github.com/Rohianon/equishare-global-trading/pkg/alpaca"
 	"github.com/Rohianon/equishare-global-trading/pkg/logger"
 	"github.com/Rohianon/equishare-global-trading/pkg/middleware"
 	"github.com/Rohianon/equishare-global-trading/services/market-data-service/internal/handler"
+	ws "github.com/Rohianon/equishare-global-trading/services/market-data-service/internal/websocket"
 )
 
 func main() {
@@ -41,6 +44,10 @@ func main() {
 
 	// Initialize handler
 	h := handler.NewHandler(alpacaClient)
+
+	// Initialize WebSocket hub
+	hub := ws.NewHub(alpacaClient)
+	go hub.Run()
 
 	// Setup Fiber app
 	app := fiber.New(fiber.Config{
@@ -85,6 +92,24 @@ func main() {
 
 	// Snapshot (combined data)
 	api.Get("/snapshot/:symbol", h.GetSnapshot) // GET /api/v1/snapshot/AAPL
+
+	// WebSocket endpoint for real-time streaming
+	app.Use("/ws", func(c *fiber.Ctx) error {
+		if websocket.IsWebSocketUpgrade(c) {
+			return c.Next()
+		}
+		return fiber.ErrUpgradeRequired
+	})
+
+	app.Get("/ws", websocket.New(func(c *websocket.Conn) {
+		clientID := uuid.New().String()
+		client := ws.NewClient(clientID, c, hub)
+		hub.Register(client)
+
+		// Start read and write pumps
+		go client.WritePump()
+		client.ReadPump()
+	}))
 
 	// Get port from environment or use default
 	port := os.Getenv("PORT")
