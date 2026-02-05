@@ -95,17 +95,17 @@ func (h *Handler) Deposit(c *fiber.Ctx) error {
 	}
 
 	if h.publisher != nil {
-		h.publisher.Publish(ctx, events.TopicPaymentInitiated, &events.Event{
-			EventType: events.EventTypePaymentInitiated,
-			Source:    "payment-service",
-			Payload: map[string]any{
+		h.publisher.Publish(ctx, events.TopicPaymentInitiated, events.NewEvent(
+			events.EventTypePaymentInitiated,
+			"payment-service",
+			map[string]any{
 				"user_id":             userID,
 				"wallet_id":           wallet.ID,
 				"amount":              req.Amount,
 				"currency":            "KES",
 				"checkout_request_id": stkResp.CheckoutRequestID,
 			},
-		})
+		))
 	}
 
 	logger.Info().
@@ -181,10 +181,10 @@ func (h *Handler) STKCallback(c *fiber.Ctx) error {
 				}
 
 				if h.publisher != nil {
-					h.publisher.Publish(ctx, events.TopicPaymentCompleted, &events.Event{
-						EventType: events.EventTypePaymentCompleted,
-						Source:    "payment-service",
-						Payload: map[string]any{
+					h.publisher.Publish(ctx, events.TopicPaymentCompleted, events.NewEvent(
+						events.EventTypePaymentCompleted,
+						"payment-service",
+						map[string]any{
 							"user_id":        mpesaTx.UserID,
 							"wallet_id":      wallet.ID,
 							"amount":         data.Amount,
@@ -192,7 +192,7 @@ func (h *Handler) STKCallback(c *fiber.Ctx) error {
 							"mpesa_receipt":  data.MpesaReceiptNo,
 							"transaction_id": tx.ID,
 						},
-					})
+					))
 				}
 
 				user, _ := h.userRepo.GetByID(ctx, mpesaTx.UserID)
@@ -211,17 +211,17 @@ func (h *Handler) STKCallback(c *fiber.Ctx) error {
 		}
 	} else {
 		if h.publisher != nil {
-			h.publisher.Publish(ctx, events.TopicPaymentFailed, &events.Event{
-				EventType: events.EventTypePaymentFailed,
-				Source:    "payment-service",
-				Payload: map[string]any{
+			h.publisher.Publish(ctx, events.TopicPaymentFailed, events.NewEvent(
+				events.EventTypePaymentFailed,
+				"payment-service",
+				map[string]any{
 					"user_id":             mpesaTx.UserID,
 					"amount":              mpesaTx.Amount,
 					"result_code":         data.ResultCode,
 					"result_desc":         data.ResultDesc,
 					"checkout_request_id": data.CheckoutRequestID,
 				},
-			})
+			))
 		}
 
 		logger.Info().
